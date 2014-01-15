@@ -1,4 +1,4 @@
-module.exports = function (classes){
+module.exports = function (classes) {
   'use strict';
 
   var
@@ -6,24 +6,26 @@ module.exports = function (classes){
     http = require('http'),
     JsonParser = require('jsonparse'),
 
-    UNAUTHORIZED = 'Unauthorized\n',
-    METHOD_NOT_ALLOWED = 'Method Not Allowed\n',
-    INVALID_REQUEST = 'Invalid Request\n',
+    UNAUTHORIZED = 'Unauthorized',
+    METHOD_NOT_ALLOWED = 'Invalid Request',
+    INVALID_REQUEST = 'Invalid Request',
     _ = classes._,
     Endpoint = classes.Endpoint,
     WebSocket = classes.Websocket,
+    Error = classes.Error,
+
     /**
      * JSON-RPC Server.
      */
       Server = Endpoint.define('Server', {
-      construct: function (opts){
+      construct: function (opts) {
         this.$super();
 
         this.opts = opts || {};
         this.opts.type = typeof this.opts.type !== 'undefined' ? this.opts.type : 'http';
         this.opts.websocket = typeof this.opts.websocket !== 'undefined' ? this.opts.websocket : true;
       },
-      _checkAuth: function(req, res){
+      _checkAuth: function (req, res) {
         var self = this;
 
         if (self.authHandler) {
@@ -38,7 +40,7 @@ module.exports = function (classes){
           if (!this.authHandler(username, password)) {
             if (res) {
               classes.EventEmitter.trace('<--', 'Unauthorized request');
-              Server.handleHttpError(req, res, 401, UNAUTHORIZED);
+              Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED));
             }
             return false;
           }
@@ -48,12 +50,12 @@ module.exports = function (classes){
       /**
        * Start listening to incoming connections.
        */
-      listen   : function (port, host){
+      listen: function (port, host) {
         var
           self = this,
           server = http.createServer();
 
-        server.on('request', function (req, res){
+        server.on('request', function (req, res) {
           self.handleHttp(req, res);
         });
 
@@ -64,7 +66,7 @@ module.exports = function (classes){
         }
 
         if (this.opts.websocket === true) {
-          server.on('upgrade', function (req, socket, body){
+          server.on('upgrade', function (req, socket, body) {
             if (WebSocket.isWebSocket(req)) {
               if (self._checkAuth(req, socket)) {
                 self.handleWebsocket(req, socket, body);
@@ -76,10 +78,10 @@ module.exports = function (classes){
         return server;
       },
 
-      listenRaw: function (port, host){
+      listenRaw: function (port, host) {
         var
           self = this,
-          server = net.createServer(function(socket){
+          server = net.createServer(function (socket) {
             self.handleRaw(socket);
           });
 
@@ -91,11 +93,11 @@ module.exports = function (classes){
         return server;
       },
 
-      listenHybrid: function (port, host){
+      listenHybrid: function (port, host) {
         var
           self = this,
           httpServer = self.listen(),
-          server = net.createServer(function(socket){
+          server = net.createServer(function (socket) {
             self.handleHybrid(httpServer, socket);
           });
 
@@ -110,7 +112,7 @@ module.exports = function (classes){
       /**
        * Handle HTTP POST request.
        */
-      handleHttp: function (req, res){
+      handleHttp: function (req, res) {
         var buffer = '', self = this;
 
         if (!self._checkAuth(req, res)) {
@@ -120,18 +122,18 @@ module.exports = function (classes){
         Endpoint.trace('<--', 'Accepted http request');
 
         if (req.method !== 'POST') {
-          Server.handleHttpError(req, res, 405, METHOD_NOT_ALLOWED);
+          Server.handleHttpError(req, res, new Error.InvalidRequest(METHOD_NOT_ALLOWED));
           return;
         }
 
-        var handle = function (buf){
+        var handle = function (buf) {
           // Check if json is valid JSON document
           var decoded;
 
           try {
             decoded = JSON.parse(buf);
           } catch (error) {
-            Server.handleHttpError(req, res, 400, INVALID_REQUEST);
+            Server.handleHttpError(req, res, new Error.ParseError(INVALID_REQUEST));
             return;
           }
 
@@ -139,16 +141,16 @@ module.exports = function (classes){
           // dispatch to the handleHttpError function.
           if (!(decoded.method && decoded.params && decoded.id)) {
             Endpoint.trace('-->', 'Response (invalid request)');
-            Server.handleHttpError(req, res, 400, INVALID_REQUEST);
+            Server.handleHttpError(req, res, new Error.InvalidRequest(INVALID_REQUEST));
             return;
           }
 
-          var reply = function (json){
+          var reply = function (json) {
             var encoded = JSON.stringify(json);
 
             if (!conn.isStreaming) {
               res.writeHead(200, {'Content-Type': 'application/json',
-                'Content-Length'                : Buffer.byteLength(encoded,'utf-8')});
+                'Content-Length': Buffer.byteLength(encoded, 'utf-8')});
               res.write(encoded);
               res.end();
             } else {
@@ -158,47 +160,55 @@ module.exports = function (classes){
             }
           };
 
-          var callback = function (err, result){
+          var callback = function (err, result) {
+            var response;
             if (err) {
+
               if (self.listeners('error').length) {
                 self.emit('error', err);
               }
               Endpoint.trace('-->', 'Failure (id ' + decoded.id + '): ' +
                 (err.stack ? err.stack : err.toString()));
-              err = err.toString();
               result = null;
+              if (!(err instanceof Error.AbstractError)) {
+                err = new Error.InternalError(err.toString());
+              }
+              response = {
+                'jsonrpc': '2.0',
+                'error': {code: err.code, message: err.message }
+              };
+
             } else {
               Endpoint.trace('-->', 'Response (id ' + decoded.id + '): ' +
                 JSON.stringify(result));
-              err = null;
+              response = {
+                'jsonrpc': '2.0',
+                'result': result || null
+              };
             }
-
             // Don't return a message if it doesn't have an ID
             if (Endpoint.hasId(decoded)) {
-              reply({
-                'jsonrpc': '2.0',
-                'result' : result,
-                'error'  : err,
-                'id'     : decoded.id
-              });
+              response.id = decoded.id;
+              reply(response);
             }
           };
+
 
           var conn = classes.HttpServerConnection.create(self, req, res);
 
           self.handleCall(decoded, conn, callback);
         }; // function handle(buf)
 
-        req.on('data', function (chunk){
+        req.on('data', function (chunk) {
           buffer = buffer + chunk;
         });
 
-        req.on('end', function (){
+        req.on('end', function () {
           handle(buffer);
         });
       },
 
-      handleRaw: function (socket){
+      handleRaw: function (socket) {
         var self = this, conn, parser, requireAuth;
 
         Endpoint.trace('<--', 'Accepted socket connection');
@@ -207,7 +217,7 @@ module.exports = function (classes){
         parser = new JsonParser();
         requireAuth = !!this.authHandler;
 
-        parser.onValue = function (decoded){
+        parser.onValue = function (decoded) {
           if (this.stack.length) {
             return;
           }
@@ -249,7 +259,7 @@ module.exports = function (classes){
           }
         };
 
-        socket.on('data', function (chunk){
+        socket.on('data', function (chunk) {
           try {
             parser.write(chunk);
           } catch (err) {
@@ -258,7 +268,7 @@ module.exports = function (classes){
         });
       },
 
-      handleWebsocket: function (request, socket, body){
+      handleWebsocket: function (request, socket, body) {
         var self = this, conn, parser;
 
         socket = new WebSocket(request, socket, body);
@@ -268,7 +278,7 @@ module.exports = function (classes){
         conn = classes.WebSocketConnection.create(self, socket);
         parser = new JsonParser();
 
-        parser.onValue = function (decoded){
+        parser.onValue = function (decoded) {
           if (this.stack.length) {
             return;
           }
@@ -276,7 +286,7 @@ module.exports = function (classes){
           conn.handleMessage(decoded);
         };
 
-        socket.on('message', function (event){
+        socket.on('message', function (event) {
           try {
             parser.write(event.data);
           } catch (err) {
@@ -285,10 +295,10 @@ module.exports = function (classes){
         });
       },
 
-      handleHybrid: function (httpServer, socket){
+      handleHybrid: function (httpServer, socket) {
         var self = this;
 
-        socket.once('data', function (chunk){
+        socket.once('data', function (chunk) {
           // If first byte is a capital letter, treat connection as HTTP
           if (chunk[0] >= 65 && chunk[0] <= 90) {
             // TODO: need to find a better way to do this
@@ -313,12 +323,12 @@ module.exports = function (classes){
        * Or just with a single valid username and password:
        *   sever.enableAuth(''myuser'', ''supersecretpassword'');
        */
-      enableAuth: function (handler, password){
+      enableAuth: function (handler, password) {
         if (!_.isFunction(handler)) {
           var user = '' + handler;
           password = '' + password;
 
-          handler = function checkAuth(suppliedUser, suppliedPassword){
+          handler = function checkAuth(suppliedUser, suppliedPassword) {
             return user === suppliedUser && password === suppliedPassword;
           };
         }
@@ -329,17 +339,22 @@ module.exports = function (classes){
       /**
        * Handle a low level server error.
        */
-      handleHttpError: function (req, res, code, message){
-        var headers = {'Content-Type': 'text/plain',
-          'Content-Length'           : message.length,
-          'Allow'                    : 'POST'};
+      handleHttpError: function (req, res, error) {
+        var message = JSON.stringify({
+          'jsonrpc': '2.0',
+          'error': {code: error.code, message: error.message},
+          'id': null
+        });
+        var headers = {'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(message),
+          'Allow': 'POST'};
 
-        if (code === 401) {
-          headers['WWW-Authenticate'] = 'Basic realm=' + 'JSON-RPC' + '';
-        }
+        /*if (code === 401) {
+         headers['WWW-Authenticate'] = 'Basic realm=' + 'JSON-RPC' + '';
+         }*/
 
         if (res.writeHead) {
-          res.writeHead(code, headers);
+          res.writeHead(200, headers);
           res.write(message);
         } else {
           headers['Content-Length'] += 3;

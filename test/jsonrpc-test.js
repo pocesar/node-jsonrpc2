@@ -22,6 +22,27 @@ module.exports = {
     };
     server.expose('echo', echo);
 
+    var throw_error = function (){
+      throw new rpc.Error.InternalError();
+    };
+    server.expose('throw_error', throw_error);
+
+    var json_rpc_error = function (args, opts, callback){
+      callback(new rpc.Error.InternalError(), args[0]);
+    };
+    server.expose('json_rpc_error', json_rpc_error);
+
+    var text_error = function (args, opts, callback){
+      callback('error', args[0]);
+    };
+    server.expose('text_error', text_error);
+
+    var javascript_error = function (args, opts, callback){
+      callback(new Error(), args[0]);
+    };
+
+    server.expose('javascript_error', javascript_error);
+
     util.inherits(MockRequest, events.EventEmitter);
 
     MockResponse = function (){
@@ -54,7 +75,10 @@ module.exports = {
       server.handleHttp(req, res);
       req.emit('data', testJSON);
       req.emit('end');
-      expect(res.httpCode).to.equal(400);
+      var decoded = JSON.parse(res.httpBody);
+      expect(decoded.id).to.equal(null);
+      expect(decoded.error.message).to.equal('Invalid Request');
+      expect(decoded.error.code).to.equal(-32600);
       done();
     };
   },
@@ -79,8 +103,34 @@ module.exports = {
       var req = new MockRequest('GET');
       var res = new MockResponse();
       server.handleHttp(req, res);
-      expect(res.httpCode).to.equal(405);
+      var decoded = JSON.parse(res.httpBody);
+      expect(decoded.id).to.equal(null);
+      expect(decoded.error.message).to.equal('Invalid Request');
+      expect(decoded.error.code).to.equal(-32600);
     },
+    'Method throw an error' : function() {
+      var req = new MockRequest('POST');
+      var res = new MockResponse();
+      server.handleHttp(req, res);
+      req.emit('data', '{ "method": "throw_error", "params": [], "id": 1 }');
+      req.emit('end');
+      var decoded = JSON.parse(res.httpBody);
+      expect(decoded.id).to.equal(1);
+      expect(decoded.error.message).to.equal('InternalError');
+      expect(decoded.error.code).to.equal(-32603);
+    },
+    'Method return an rpc error' : function() {
+      var req = new MockRequest('POST');
+      var res = new MockResponse();
+      server.handleHttp(req, res);
+      req.emit('data', '{ "method": "json_rpc_error", "params": [], "id": 1 }');
+      req.emit('end');
+      var decoded = JSON.parse(res.httpBody);
+      expect(decoded.id).to.equal(1);
+      expect(decoded.error.message).to.equal('InternalError');
+      expect(decoded.error.code).to.equal(-32603);
+    },
+//      text_error javascript_error
 
     'Missing object attribute (method)': function (done){
       var testJSON = '{ "params": ["Hello, World!"], "id": 1 }';
@@ -109,8 +159,8 @@ module.exports = {
       expect(res.httpCode).to.equal(200);
       var decoded = JSON.parse(res.httpBody);
       expect(decoded.id).to.equal(1);
-      expect(decoded.error).to.equal('Error: Unknown RPC call "notRegistered"');
-      expect(decoded.result).to.equal(null);
+      expect(decoded.error.message).to.equal('Unknown RPC call "notRegistered"');
+      expect(decoded.error.code).to.equal(-32601);
     },
 
     // VALID REQUEST
@@ -125,7 +175,7 @@ module.exports = {
       expect(res.httpCode).to.equal(200);
       var decoded = JSON.parse(res.httpBody);
       expect(decoded.id).to.equal(1);
-      expect(decoded.error).to.equal(null);
+      expect(decoded.error).to.equal(undefined);
       expect(decoded.result).to.equal('Hello, World!');
     },
 
@@ -154,7 +204,7 @@ module.exports = {
       expect(res.httpCode).to.equal(200);
       var decoded = JSON.parse(res.httpBody);
       expect(decoded.id).to.equal(1);
-      expect(decoded.error).to.equal(null);
+      expect(decoded.error).to.equal(undefined);
       expect(decoded.result).to.equal('Hello, World!');
     },
 
@@ -176,8 +226,9 @@ module.exports = {
       expect(res.httpCode).to.equal(200);
       var decoded = JSON.parse(res.httpBody);
       expect(decoded.id).to.equal(1);
-      expect(decoded.error).to.equal('This is an error');
-      expect(decoded.result).to.equal(null);
+      expect(decoded.error.message).to.equal('This is an error');
+      expect(decoded.error.code).to.equal(-32603);
+      expect(decoded.result).to.equal(undefined);
     }
   }
 };

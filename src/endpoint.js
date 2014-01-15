@@ -4,6 +4,7 @@ module.exports = function (classes){
   var
     _ = classes._,
     EventEmitter = classes.EventEmitter,
+    Error = classes.Error,
     /**
      * Abstract base class for RPC endpoints.
      *
@@ -55,7 +56,7 @@ module.exports = function (classes){
           decoded.method + '(' + decoded.params.join(', ') + ')');
 
         if (!this.functions.hasOwnProperty(decoded.method)) {
-          callback(new Error('Unknown RPC call "' + decoded.method + '"'));
+          callback(new Error.MethodNotFound('Unknown RPC call "' + decoded.method + '"'));
           return;
         }
 
