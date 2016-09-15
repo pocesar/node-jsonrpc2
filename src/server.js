@@ -32,20 +32,34 @@ module.exports = function (classes) {
 
         if (self.authHandler) {
           var
-            authHeader = req.headers['authorization'] || '', // get the header
-            authToken = authHeader.split(/\s+/).pop() || '', // get the token
-            auth = new Buffer(authToken, 'base64').toString(), // base64 -> string
-            parts = auth.split(/:/), // split on colon
-            username = parts[0],
-            password = parts[1];
-
-          if (!this.authHandler(username, password)) {
-            if (res) {
-              classes.EventEmitter.trace('<--', 'Unauthorized request');
-              Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED), self.opts.headers);
+            authHeader = req.headers['authorization'] || ''; // get the header
+            var authType = authHeader.split(/\s+/).shift() || '';
+            var authToken = authHeader.split(/\s+/).pop() || '';
+            // get the token
+            if (authType === 'Basic'){
+                var auth = new Buffer(authToken, 'base64').toString(), // base64 -> string
+                parts = auth.split(/:/), // split on colon
+                username = parts[0],
+                password = parts[1];
+                if (!this.authHandler(username, password)) {
+                    if (res) {
+                      classes.EventEmitter.trace('<--', 'Unauthorized request');
+                      Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED), self.opts.headers);
+                    }
+                    return false;
+                }
+            }else if(authType === 'Bearer'){
+                if (!this.authHandler(authToken)) {
+                    if (res) {
+                      classes.EventEmitter.trace('<--', 'Unauthorized request');
+                      Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED), self.opts.headers);
+                    }
+                    return false;
+                }
             }
-            return false;
-          }
+            
+
+         
         }
         return true;
       },
@@ -365,7 +379,16 @@ module.exports = function (classes) {
         }
 
         this.authHandler = handler;
+      },
+      enableJWTAuth: function (handler) {
+        /*if (!_.isFunction(handler)) {
+         
+          //handle jwt here
+        }*/
+
+        this.authHandler = handler;
       }
+      
     }, {
       /**
        * Handle a low level server error.
