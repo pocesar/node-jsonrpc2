@@ -16,18 +16,25 @@ module.exports = function (classes){
      * JSON-RPC Client.
      */
       Client = Endpoint.$define('Client', {
-      construct    : function ($super, port, host, user, password){
+      construct    : function ($super, port, host,user,password, jwttotken){
         $super();
 
         this.port = port;
         this.host = host;
         this.user = user;
         this.password = password;
+        this.jwttotken = jwttotken;
+        
+        
       },
       _authHeader: function(headers){
         if (this.user && this.password) {
           var buff = new Buffer(this.user + ':' + this.password).toString('base64');
           headers['Authorization'] = 'Basic ' + buff;
+        }else{
+            if(this.jwttoken){
+                headers['Authorization'] = 'Bearer ' + this.jwttoken;
+            }
         }
       },
       /**
