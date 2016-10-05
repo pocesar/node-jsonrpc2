@@ -152,14 +152,9 @@ module.exports = function (classes) {
                   self._handleUnauthorized(req, socket);
                 }
               }).catch(function (err) { 
-                // should be some other error, it was thrown while
-                // trying to make the authorization or to
-                // handle the websocket
-
-                // TODO: improve error handling/logging by providing the exact
-                // error
-                console.log('http upgrade connection ' + err);
-                self._handleUnauthorized(req, socket);
+                // handle internal server error from Check Authorization
+                classes.EventEmitter.trace('<--', 'Internal Server Error');
+                Server.handleHttpError(req, socket, new Error.InternalError(err.message), self.opts.headers);  
               });
             }
           });
@@ -330,9 +325,9 @@ module.exports = function (classes) {
             return;
           }
         }).catch(function (err) {
-          // TODO: improve error handling/logging by providing the exact error
-          console.log('handle http ' + err);
-          self._handleUnauthorized(req, res);
+          // handle Internal Server Error from Check authorization
+          classes.EventEmitter.trace('<--', 'Internal Server Error');
+          Server.handleHttpError(req, res, new Error.InternalError(err.message), self.opts.headers);
           return;
         });
       },

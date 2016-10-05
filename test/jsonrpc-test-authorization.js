@@ -5,7 +5,9 @@ var
   Promise = require('bluebird'),
   rpc = require('../src/jsonrpc.js'),
   Errors = rpc.Error,
-  server, client, serverHandle;
+  server, client, serverHandle,
+  noCookieValueErrorMessage = 'no cookie value',
+  noTokenValueErrorMessage = 'no token value';
 
 module.exports = {
   'Json-Rpc2 Authorization -': { 
@@ -276,7 +278,7 @@ module.exports = {
         // Cookie Authorization
         server.enableCookieAuth(function (cookieValue, callback) {
           if (!cookieValue) {
-            return callback(new Error('no cookie value'), null);
+            return callback(new Error(noCookieValueErrorMessage), null);
           }
           return callback(null, (cookieValue === 'validCookieValue'));
         });
@@ -339,7 +341,7 @@ module.exports = {
         server.enableCookieAuth(function (cookieValue) {
           return new Promise(function (resolve, reject) {
             if (!cookieValue) {
-              reject(new Error('no cookie value'));
+              reject(new Error(noCookieValueErrorMessage));
             }
 
             resolve(cookieValue === 'validCookieValue');
@@ -465,7 +467,7 @@ module.exports = {
         // Bearer (JWT) Authorization
         server.enableJWTAuth(function (tokenValue, callback) {
           if (!tokenValue) {
-            return callback(new Error('no token value'), null);
+            return callback(new Error(noTokenValueErrorMessage), null);
           }
           return callback(null, (tokenValue === 'validTokenValue'));
         });
@@ -527,7 +529,7 @@ module.exports = {
         // Bearer (JWT) Authorization
         server.enableJWTAuth(function (tokenValue, callback) {
          if (!tokenValue) {
-            return callback(new Error('no token value'), null);
+            return callback(new Error(noTokenValueErrorMessage), null);
           }
           return callback(null, (tokenValue === 'validTokenValue'));
         });
@@ -638,7 +640,7 @@ module.exports = {
         });
       },
 
-      'basic/cookie - different type - should return -32602 Unauthorized': function (done) {
+      'basic/cookie - different type - should return -32603 Unauthorized': function (done) {
         server.setAuthType('basic');
         client.setAuthType('cookie');
 
@@ -922,13 +924,13 @@ module.exports = {
         server.enableBasicAuth('user', 'pass');
         server.enableCookieAuth(function (cookieValue, callback) {
           if (!cookieValue) {
-            return callback(new Error('no cookie value'), null);
+            return callback(new Error(noCookieValueErrorMessage), null);
           }
           return callback(null, (cookieValue === 'validCookieValue'));
         });
         server.enableJWTAuth(function (tokenValue, callback) {
           if (!tokenValue) {
-            return callback(new Error('no token value'), null);
+            return callback(new Error(noTokenValueErrorMessage), null);
           }
           return callback(null, (tokenValue === 'validTokenValue'));
         });
@@ -1019,7 +1021,7 @@ module.exports = {
         });
       },
 
-      'basic/cookie - switch only server - should return -32602 Unauthorized': function (done) {
+      'basic/cookie - switch only server - should return -32603 InternalError': function (done) {
         server.setAuthType('basic');
         client.setAuthType('basic');
 
@@ -1038,8 +1040,8 @@ module.exports = {
           // Should return Unauthorized
           client.call('echo', params, function (err, result) {
             expect(result).to.equal(undefined);
-            expect(err.code).to.equal((new Errors.InvalidParams()).code);
-            expect(err.message).to.be.string('Unauthorized');
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
 
             done();
           });
@@ -1175,7 +1177,7 @@ module.exports = {
         });
       },
 
-      'cookie/bearer(jwt) - different type - should return -32602 Unauthorized': function (done) {
+      'cookie/bearer(jwt) - different type - should return -32603 InternalError': function (done) {
         server.setAuthType('cookie');
         client.setAuthType('jwt');
 
@@ -1183,14 +1185,14 @@ module.exports = {
 
         client.call('echo', params, function (err, result) {
           expect(result).to.equal(undefined);
-          expect(err.code).to.equal((new Errors.InvalidParams()).code);
-          expect(err.message).to.be.string('Unauthorized');
+          expect(err.code).to.equal((new Errors.InternalError()).code);
+          expect(err.message).to.be.string(noCookieValueErrorMessage);
 
           done();
         });
       },
 
-      'cookie/bearer(jwt) - switch only client - should return -32602 Unauthorized': function (done) {
+      'cookie/bearer(jwt) - switch only client - should return -32603 InternalError': function (done) {
         server.setAuthType('cookie');
         client.setAuthType('cookie');
 
@@ -1209,15 +1211,15 @@ module.exports = {
           // Should return Unauthorized
           client.call('echo', params, function (err, result) {
             expect(result).to.equal(undefined);
-            expect(err.code).to.equal((new Errors.InvalidParams()).code);
-            expect(err.message).to.be.string('Unauthorized');
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
 
             done();
           });
         });
       },
 
-      'cookie/bearer(jwt) - switch only server - should return -32602 Unauthorized': function (done) {
+      'cookie/bearer(jwt) - switch only server - should return -32603 InternalError': function (done) {
         server.setAuthType('cookie');
         client.setAuthType('cookie');
 
@@ -1236,8 +1238,8 @@ module.exports = {
           // Should return Unauthorized
           client.call('echo', params, function (err, result) {
             expect(result).to.equal(undefined);
-            expect(err.code).to.equal((new Errors.InvalidParams()).code);
-            expect(err.message).to.be.string('Unauthorized');
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noTokenValueErrorMessage);
 
             done();
           });
@@ -1262,7 +1264,7 @@ module.exports = {
         server.enableCookieAuth(function (cookieValue) {
           return new Promise(function (resolve, reject) {
             if (!cookieValue) {
-              reject(new Error('no cookie value'));
+              reject(new Error(noCookieValueErrorMessage));
             }
 
             resolve(cookieValue === 'validCookieValue');
@@ -1271,7 +1273,7 @@ module.exports = {
         server.enableJWTAuth(function (tokenValue) {
           return new Promise(function (resolve, reject) {
             if (!tokenValue) {
-              reject(new Error('no token value'));
+              reject(new Error(noTokenValueErrorMessage));
             }
 
             resolve(tokenValue === 'validTokenValue');
@@ -1364,7 +1366,7 @@ module.exports = {
         });
       },
 
-      'basic/cookie - switch only server - should return -32602 Unauthorized': function (done) {
+      'basic/cookie - switch only server - should return -32603 InternalError': function (done) {
         server.setAuthType('basic');
         client.setAuthType('basic');
 
@@ -1383,8 +1385,8 @@ module.exports = {
           // Should return Unauthorized
           client.call('echo', params, function (err, result) {
             expect(result).to.equal(undefined);
-            expect(err.code).to.equal((new Errors.InvalidParams()).code);
-            expect(err.message).to.be.string('Unauthorized');
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
 
             done();
           });
@@ -1520,7 +1522,7 @@ module.exports = {
         });
       },
 
-      'cookie/bearer(jwt) - different type - should return -32602 Unauthorized': function (done) {
+      'cookie/bearer(jwt) - different type - should return -32603 InternalError': function (done) {
         server.setAuthType('cookie');
         client.setAuthType('jwt');
 
@@ -1528,14 +1530,14 @@ module.exports = {
 
         client.call('echo', params, function (err, result) {
           expect(result).to.equal(undefined);
-          expect(err.code).to.equal((new Errors.InvalidParams()).code);
-          expect(err.message).to.be.string('Unauthorized');
+          expect(err.code).to.equal((new Errors.InternalError()).code);
+          expect(err.message).to.be.string(noCookieValueErrorMessage);
 
           done();
         });
       },
 
-      'cookie/bearer(jwt) - switch only client - should return -32602 Unauthorized': function (done) {
+      'cookie/bearer(jwt) - switch only client - should return -32603 InternalError': function (done) {
         server.setAuthType('cookie');
         client.setAuthType('cookie');
 
@@ -1554,15 +1556,15 @@ module.exports = {
           // Should return Unauthorized
           client.call('echo', params, function (err, result) {
             expect(result).to.equal(undefined);
-            expect(err.code).to.equal((new Errors.InvalidParams()).code);
-            expect(err.message).to.be.string('Unauthorized');
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
 
             done();
           });
         });
       },
 
-      'cookie/bearer(jwt) - switch only server - should return -32602 Unauthorized': function (done) {
+      'cookie/bearer(jwt) - switch only server - should return -32603 InternalError': function (done) {
         server.setAuthType('cookie');
         client.setAuthType('cookie');
 
@@ -1581,8 +1583,8 @@ module.exports = {
           // Should return Unauthorized
           client.call('echo', params, function (err, result) {
             expect(result).to.equal(undefined);
-            expect(err.code).to.equal((new Errors.InvalidParams()).code);
-            expect(err.message).to.be.string('Unauthorized');
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noTokenValueErrorMessage);
 
             done();
           });
