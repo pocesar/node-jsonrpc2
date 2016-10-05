@@ -84,6 +84,8 @@ module.exports = function (classes) {
             authHeader = self._getAuthHeader(req), // get the header
             authToken = self._getAuthValue(authHeader); // get the token
 
+          var promisifiedAuthHandler = Promise.method(self.authHandler); // promisify for the sync implementation method
+
           switch (this.authType) {
             case Authorization.BASIC:
               var
@@ -92,19 +94,25 @@ module.exports = function (classes) {
                   username = parts[0],
                   password = parts[1];
 
-              return Promise.try(function () {
-                return self.authHandler(username, password);  
+              // i think it introduces some performance degradation due to double promisification.
+              // i also think it might be negligible 
+              return promisifiedAuthHandler(username, password, function callback(err, result) {
+                if (err) {
+                  return Promise.reject(err);
+                }
+                return Promise.resolve(result);
               });
 
             case Authorization.COOKIE:
             case Authorization.JWT:
-              return Promise.try(function () { 
-                return self.authHandler(authToken);
+              return promisifiedAuthHandler(authToken, function callback(err, result) {
+                if (err) {
+                  return Promise.reject(err);
+                }
+                return Promise.resolve(result);
               });
-
           }
         } else {
-        
           // Handle case for non auth server
           return new Promise(function (resolve) {
             resolve(true);
@@ -139,7 +147,6 @@ module.exports = function (classes) {
             if (WebSocket.isWebSocket(req)) {
               self._checkAuth(req, socket).then(function (result) {
                 if (result) {
-                  console.log('passed auth');
                   self.handleWebsocket(req, socket, body);
                 } else {
                   self._handleUnauthorized(req, socket);
@@ -148,8 +155,12 @@ module.exports = function (classes) {
                 // should be some other error, it was thrown while
                 // trying to make the authorization or to
                 // handle the websocket
+
+                // TODO: improve error handling/logging by providing the exact
+                // error
+                console.log('http upgrade connection ' + err);
                 self._handleUnauthorized(req, socket);
-              })
+              });
             }
           });
         }
@@ -212,7 +223,6 @@ module.exports = function (classes) {
         
 
         var handle = function handle(buf) {
-          console.log('handling rpc')
           // Check if json is valid JSON document
           var decoded;
 
@@ -260,7 +270,7 @@ module.exports = function (classes) {
 
           var callback = function callback(err, result) {
             var response;
-            console.log('called the callback ');
+
             if (err) {
 
               self.emit('error', err);
@@ -273,7 +283,7 @@ module.exports = function (classes) {
               if (!(err instanceof Error.AbstractError)) {
                 err = new Error.InternalError(err.toString());
               }
-              console.log('throw error');
+
               response = {
                 'jsonrpc': '2.0',
                 'error': {code: err.code, message: err.message }
@@ -306,14 +316,12 @@ module.exports = function (classes) {
         self._checkAuth(req, res).then(function (result) {
           if (result) {  // successful authorization
             Endpoint.trace('<--', 'Accepted http request');
-            console.log('setting req handlers.');
+
             req.on('data', function requestData(chunk) {
-              console.log('on data'); 
               buffer = buffer + chunk;
             });
 
             req.on('end', function requestEnd() {
-              console.log('request end, handling');
               handle(buffer);
             });
             
@@ -322,8 +330,10 @@ module.exports = function (classes) {
             return;
           }
         }).catch(function (err) {
-          console.log('error ' + err);
-          return self._handleUnauthorized(req, res);
+          // TODO: improve error handling/logging by providing the exact error
+          console.log('handle http ' + err);
+          self._handleUnauthorized(req, res);
+          return;
         });
       },
 

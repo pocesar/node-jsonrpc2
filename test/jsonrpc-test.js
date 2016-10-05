@@ -23,7 +23,7 @@ module.exports = {
       };
       server.expose('echo', echo);
 
-      var throw_error = function (args, opts, callback) {
+      var throw_error = function () {
         throw new rpc.Error.InternalError();
       };
       server.expose('throw_error', throw_error);
