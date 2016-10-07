@@ -2,13 +2,16 @@
 
 var
   expect = require('expect.js'),
+  Promise = require('bluebird'),
   rpc = require('../src/jsonrpc.js'),
   Errors = rpc.Error,
-  server, client, serverHandle;
+  server, client, serverHandle,
+  noCookieValueErrorMessage = 'no cookie value',
+  noTokenValueErrorMessage = 'no token value';
 
 module.exports = {
-  'Json-Rpc2 Authorization -': {
-    'Deprecated Basic -': {
+  'Json-Rpc2 Authorization -': { 
+    'Deprecated Basic - sync authHandler -': {
       beforeEach: function () {
         // Server
         server = rpc.Server.$create({
@@ -20,7 +23,7 @@ module.exports = {
           callback(null, args[0]);
         });
 
-        server.expose('throw_error', function (args, opts, callback) {
+        server.expose('throw_error', function () {
           throw new Errors.InternalError();
         });
 
@@ -42,6 +45,7 @@ module.exports = {
         var message = ['Hello, Authorization!'];
 
         client.call('throw_error', message, function (err, result) {
+          expect(result).to.equal(undefined);
           expect(err.code).to.equal((new Errors.InternalError()).code);
           expect(err.message).to.be.string('InternalError');
 
@@ -112,7 +116,7 @@ module.exports = {
       }
     },
 
-    'Basic -': {
+    'Basic - sync authHandler -': {
       beforeEach: function () {
         // Server
         server = rpc.Server.$create({
@@ -184,23 +188,22 @@ module.exports = {
       },
 
       'client basicAuth function - should return -32602 Unauthorized': function (done) {
-      // Client
-      client = rpc.Client.$create(8088, 'localhost');
-      client.basicAuth('wrong-user', 'wrong-pass');
-      var message = ['Hello, Authorization!'];
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.basicAuth('wrong-user', 'wrong-pass');
+        var message = ['Hello, Authorization!'];
 
-      client.call('echo', message, function (err, result) {
-        expect(result).to.equal(undefined);
-        expect(err.code).to.equal((new Errors.InvalidParams()).code);
-        expect(err.message).to.be.string('Unauthorized');
+        client.call('echo', message, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
 
-        done();
-      });
-
-    }
+          done();
+        });
+      }
     },
-
-    'Cookie -': {
+    
+    'Cookie - sync authHandler -': {
       beforeEach: function () {
         // Server
         server = rpc.Server.$create({
@@ -244,23 +247,151 @@ module.exports = {
       },
 
       'client cookieAuth function - should return -32602 Unauthorized': function (done) {
-      // Client
-      client = rpc.Client.$create(8088, 'localhost');
-      client.cookieAuth('wrongCookieValue');
-      var message = ['Hello, Authorization!'];
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.cookieAuth('wrongCookieValue');
+        var message = ['Hello, Authorization!'];
 
-      client.call('echo', message, function (err, result) {
-        expect(result).to.equal(undefined);
-        expect(err.code).to.equal((new Errors.InvalidParams()).code);
-        expect(err.message).to.be.string('Unauthorized');
+        client.call('echo', message, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
 
-        done();
-      });
+          done();
+        });
+      }
+    },
+    
+    'Cookie - callback authHandler -': {
+      beforeEach: function () {
+        // Server
+        server = rpc.Server.$create({
+          websocket: true
+        });
 
-    }
-  },
+        server.expose('echo', function (args, opts, callback) {
+          // callback(err, result)
+          callback(null, args[0]);
+        });
 
-    'Bearer (JWT) -': {
+        serverHandle = server.listen(8088, 'localhost');
+        // Cookie Authorization
+        server.enableCookieAuth(function (cookieValue, callback) {
+          if (!cookieValue) {
+            return callback(new Error(noCookieValueErrorMessage), null);
+          }
+          return callback(null, (cookieValue === 'validCookieValue'));
+        });
+      },
+
+      afterEach: function () {
+        serverHandle.close();
+        serverHandle = null;
+        server = null;
+        client = null;
+      },
+
+      'client cookieAuth function - should return 200 OK': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.cookieAuth('validCookieValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(message[0]);
+
+          done();
+        });
+      },
+
+      'client cookieAuth function - should return -32602 Unauthorized': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.cookieAuth('wrongCookieValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      }
+    },
+
+    'Cookie - promise authHandler -': {
+      beforeEach: function () {
+        // Server
+        server = rpc.Server.$create({
+          websocket: true
+        });
+
+        server.expose('echo', function (args, opts, callback) {
+          // callback(err, result)
+          callback(null, args[0]);
+        });
+
+        serverHandle = server.listen(8088, 'localhost');
+        // Cookie Authorization
+        server.enableCookieAuth(function (cookieValue) {
+          return new Promise(function (resolve, reject) {
+            if (!cookieValue) {
+              reject(new Error(noCookieValueErrorMessage));
+            }
+
+            resolve(cookieValue === 'validCookieValue');
+          });
+            
+          
+        });
+      },
+
+      afterEach: function () {
+        serverHandle.close();
+        serverHandle = null;
+        server = null;
+        client = null;
+      },
+
+      'client cookieAuth function - should return 200 OK': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.cookieAuth('validCookieValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(message[0]);
+
+          done();
+        });
+      },
+
+      'client cookieAuth function - should return -32602 Unauthorized': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.cookieAuth('wrongCookieValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      }
+    },
+    
+    'Bearer (JWT) - sync authHandler -': {
       beforeEach: function () {
       // Server
       server = rpc.Server.$create({
@@ -320,7 +451,131 @@ module.exports = {
         }
     },
 
-    'Mixed -': {
+    'Bearer (JWT) - callback authHandler -': {
+      beforeEach: function () {
+        // Server
+        server = rpc.Server.$create({
+          websocket: true
+        });
+
+        server.expose('echo', function (args, opts, callback) {
+          // callback(err, result)
+          callback(null, args[0]);
+        });
+
+        serverHandle = server.listen(8088, 'localhost');
+        // Bearer (JWT) Authorization
+        server.enableJWTAuth(function (tokenValue, callback) {
+          if (!tokenValue) {
+            return callback(new Error(noTokenValueErrorMessage), null);
+          }
+          return callback(null, (tokenValue === 'validTokenValue'));
+        });
+      },
+
+      afterEach: function () {
+        serverHandle.close();
+        serverHandle = null;
+        server = null;
+        client = null;
+      },
+
+      'client cookieAuth function - should return 200 OK': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.jwtAuth('validTokenValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(message[0]);
+
+          done();
+        });
+      },
+
+      'client cookieAuth function - should return -32602 Unauthorized': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.jwtAuth('wrongTokenValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      }
+    },
+
+    'Bearer (JWT) - promise authHandler -': {
+      beforeEach: function () {
+        // Server
+        server = rpc.Server.$create({
+          websocket: true
+        });
+
+        server.expose('echo', function (args, opts, callback) {
+          // callback(err, result)
+          callback(null, args[0]);
+        });
+
+        serverHandle = server.listen(8088, 'localhost');
+        // Bearer (JWT) Authorization
+        server.enableJWTAuth(function (tokenValue, callback) {
+         if (!tokenValue) {
+            return callback(new Error(noTokenValueErrorMessage), null);
+          }
+          return callback(null, (tokenValue === 'validTokenValue'));
+        });
+      },
+
+      afterEach: function () {
+        serverHandle.close();
+        serverHandle = null;
+        server = null;
+        client = null;
+      },
+
+      'client cookieAuth function - should return 200 OK': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.jwtAuth('validTokenValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(message[0]);
+
+          done();
+        });
+      },
+
+      'client cookieAuth function - should return -32602 Unauthorized': function (done) {
+        // Client
+        client = rpc.Client.$create(8088, 'localhost');
+        client.jwtAuth('wrongTokenValue');
+        var message = ['Hello, Authorization!'];
+
+        client.call('echo', message, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      }
+    },
+
+    'Mixed - sync authHandler -': {
       beforeEach: function () {
         server = rpc.Server.$create({
           websocket: true
@@ -385,7 +640,7 @@ module.exports = {
         });
       },
 
-      'basic/cookie - different type - should return -32602 Unauthorized': function (done) {
+      'basic/cookie - different type - should return -32603 Unauthorized': function (done) {
         server.setAuthType('basic');
         client.setAuthType('cookie');
 
@@ -651,6 +906,691 @@ module.exports = {
           });
         });
       }      
+    },
+
+    'Mixed - callback authHandler -': {
+      beforeEach: function () {
+        server = rpc.Server.$create({
+          websocket: true
+        });
+
+        server.expose('echo', function (args, opts, callback) {
+          callback(null, args[0]);
+        });
+
+        serverHandle = server.listen(8088, 'localhost');
+
+        // Server Authorization
+        server.enableBasicAuth('user', 'pass');
+        server.enableCookieAuth(function (cookieValue, callback) {
+          if (!cookieValue) {
+            return callback(new Error(noCookieValueErrorMessage), null);
+          }
+          return callback(null, (cookieValue === 'validCookieValue'));
+        });
+        server.enableJWTAuth(function (tokenValue, callback) {
+          if (!tokenValue) {
+            return callback(new Error(noTokenValueErrorMessage), null);
+          }
+          return callback(null, (tokenValue === 'validTokenValue'));
+        });
+
+        // Client Authorization
+        client = rpc.Client.$create(8088, 'localhost');
+        client.basicAuth('user', 'pass');
+        client.cookieAuth('validCookieValue');
+        client.jwtAuth('validTokenValue');
+      },
+
+      afterEach: function () {
+        serverHandle.close();
+        serverHandle = null;
+        server = null;
+        client = null;
+      },
+
+      'basic/cookie - switch both - should return 200 OK': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        // We MUST enable promises on the call method!!!
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type (would look better to have promises here)
+          server.setAuthType('cookie');
+          client.setAuthType('cookie');
+
+          client.call('echo', params, function (err, result) {
+            if (err) {
+              return done(new Error(JSON.stringify(err)));
+            }
+
+            expect(JSON.stringify(result)).to.be.string(params[0]);
+
+            done();
+          });
+        });
+      },
+
+      'basic/cookie - different type - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      },
+
+      'basic/cookie - switch only client - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Client
+          client.setAuthType('cookie');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InvalidParams()).code);
+            expect(err.message).to.be.string('Unauthorized');
+
+            done();
+          });
+        });
+      },
+
+      'basic/cookie - switch only server - should return -32603 InternalError': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Server
+          server.setAuthType('cookie');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
+
+            done();
+          });
+        });
+      },
+
+      'basic/bearer(jwt) - switch both - should return 200 OK': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        // We MUST enable promises on the call method!!!
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type
+          server.setAuthType('jwt');
+          client.setAuthType('jwt');
+
+          client.call('echo', params, function (err, result) {
+            if (err) {
+              return done(new Error(JSON.stringify(err)));
+            }
+
+            expect(JSON.stringify(result)).to.be.string(params[0]);
+
+            done();
+          });
+        });
+      },
+
+      'basic/bearer(jwt) - different type - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('jwt');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      },
+
+      'basic/bearer(jwt) - switch only client - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Client
+          client.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InvalidParams()).code);
+            expect(err.message).to.be.string('Unauthorized');
+
+            done();
+          });
+        });
+      },
+
+      'basic/bearer(jwt) - switch only server - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Server
+          server.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InvalidParams()).code);
+            expect(err.message).to.be.string('Unauthorized');
+
+            done();
+          });
+        });
+      },
+
+      'cookie/bearer(jwt) - switch both - should return 200 OK': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        // We MUST enable promises on the call method!!!
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type
+          server.setAuthType('jwt');
+          client.setAuthType('jwt');
+
+          client.call('echo', params, function (err, result) {
+            if (err) {
+              return done(new Error(JSON.stringify(err)));
+            }
+
+            expect(JSON.stringify(result)).to.be.string(params[0]);
+
+            done();
+          });
+        });
+      },
+
+      'cookie/bearer(jwt) - different type - should return -32603 InternalError': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('jwt');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InternalError()).code);
+          expect(err.message).to.be.string(noCookieValueErrorMessage);
+
+          done();
+        });
+      },
+
+      'cookie/bearer(jwt) - switch only client - should return -32603 InternalError': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Client
+          client.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
+
+            done();
+          });
+        });
+      },
+
+      'cookie/bearer(jwt) - switch only server - should return -32603 InternalError': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Server
+          server.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noTokenValueErrorMessage);
+
+            done();
+          });
+        });
+      }      
+    },
+
+    'Mixed - promise authHandler -': {
+      beforeEach: function () {
+        server = rpc.Server.$create({
+          websocket: true
+        });
+
+        server.expose('echo', function (args, opts, callback) {
+          callback(null, args[0]);
+        });
+
+        serverHandle = server.listen(8088, 'localhost');
+
+        // Server Authorization
+        server.enableBasicAuth('user', 'pass');
+        server.enableCookieAuth(function (cookieValue) {
+          return new Promise(function (resolve, reject) {
+            if (!cookieValue) {
+              reject(new Error(noCookieValueErrorMessage));
+            }
+
+            resolve(cookieValue === 'validCookieValue');
+          });
+        });
+        server.enableJWTAuth(function (tokenValue) {
+          return new Promise(function (resolve, reject) {
+            if (!tokenValue) {
+              reject(new Error(noTokenValueErrorMessage));
+            }
+
+            resolve(tokenValue === 'validTokenValue');
+          });
+        });
+
+        // Client Authorization
+        client = rpc.Client.$create(8088, 'localhost');
+        client.basicAuth('user', 'pass');
+        client.cookieAuth('validCookieValue');
+        client.jwtAuth('validTokenValue');
+      },
+
+      afterEach: function () {
+        serverHandle.close();
+        serverHandle = null;
+        server = null;
+        client = null;
+      },
+
+      'basic/cookie - switch both - should return 200 OK': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        // We MUST enable promises on the call method!!!
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type (would look better to have promises here)
+          server.setAuthType('cookie');
+          client.setAuthType('cookie');
+
+          client.call('echo', params, function (err, result) {
+            if (err) {
+              return done(new Error(JSON.stringify(err)));
+            }
+
+            expect(JSON.stringify(result)).to.be.string(params[0]);
+
+            done();
+          });
+        });
+      },
+
+      'basic/cookie - different type - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      },
+
+      'basic/cookie - switch only client - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Client
+          client.setAuthType('cookie');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InvalidParams()).code);
+            expect(err.message).to.be.string('Unauthorized');
+
+            done();
+          });
+        });
+      },
+
+      'basic/cookie - switch only server - should return -32603 InternalError': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Server
+          server.setAuthType('cookie');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
+
+            done();
+          });
+        });
+      },
+
+      'basic/bearer(jwt) - switch both - should return 200 OK': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        // We MUST enable promises on the call method!!!
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type
+          server.setAuthType('jwt');
+          client.setAuthType('jwt');
+
+          client.call('echo', params, function (err, result) {
+            if (err) {
+              return done(new Error(JSON.stringify(err)));
+            }
+
+            expect(JSON.stringify(result)).to.be.string(params[0]);
+
+            done();
+          });
+        });
+      },
+
+      'basic/bearer(jwt) - different type - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('jwt');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InvalidParams()).code);
+          expect(err.message).to.be.string('Unauthorized');
+
+          done();
+        });
+      },
+
+      'basic/bearer(jwt) - switch only client - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Client
+          client.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InvalidParams()).code);
+            expect(err.message).to.be.string('Unauthorized');
+
+            done();
+          });
+        });
+      },
+
+      'basic/bearer(jwt) - switch only server - should return -32602 Unauthorized': function (done) {
+        server.setAuthType('basic');
+        client.setAuthType('basic');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Server
+          server.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InvalidParams()).code);
+            expect(err.message).to.be.string('Unauthorized');
+
+            done();
+          });
+        });
+      },
+
+      'cookie/bearer(jwt) - switch both - should return 200 OK': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        // We MUST enable promises on the call method!!!
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type
+          server.setAuthType('jwt');
+          client.setAuthType('jwt');
+
+          client.call('echo', params, function (err, result) {
+            if (err) {
+              return done(new Error(JSON.stringify(err)));
+            }
+
+            expect(JSON.stringify(result)).to.be.string(params[0]);
+
+            done();
+          });
+        });
+      },
+
+      'cookie/bearer(jwt) - different type - should return -32603 InternalError': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('jwt');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          expect(result).to.equal(undefined);
+          expect(err.code).to.equal((new Errors.InternalError()).code);
+          expect(err.message).to.be.string(noCookieValueErrorMessage);
+
+          done();
+        });
+      },
+
+      'cookie/bearer(jwt) - switch only client - should return -32603 InternalError': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Client
+          client.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noCookieValueErrorMessage);
+
+            done();
+          });
+        });
+      },
+
+      'cookie/bearer(jwt) - switch only server - should return -32603 InternalError': function (done) {
+        server.setAuthType('cookie');
+        client.setAuthType('cookie');
+
+        var params = ['Hello! Mixed Authorization'];
+
+        client.call('echo', params, function (err, result) {
+          if (err) {
+            return done(new Error(JSON.stringify(err)));
+          }
+
+          expect(JSON.stringify(result)).to.be.string(params[0]);
+
+          // Switch Auth Type Only for the Server
+          server.setAuthType('jwt');
+
+          // Should return Unauthorized
+          client.call('echo', params, function (err, result) {
+            expect(result).to.equal(undefined);
+            expect(err.code).to.equal((new Errors.InternalError()).code);
+            expect(err.message).to.be.string(noTokenValueErrorMessage);
+
+            done();
+          });
+        });
+      }      
     }
+    
   }
 };

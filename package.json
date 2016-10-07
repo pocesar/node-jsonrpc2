@@ -19,20 +19,23 @@
   ],
   "license": "MIT",
   "author": {
-      "name": "Eric Florenzano",
-      "url": "eflorenzano.com"
+    "name": "Eric Florenzano",
+    "url": "eflorenzano.com"
   },
-  "maintainers": [{
+  "maintainers": [
+    {
       "name": "Paulo Cesar",
       "url": "https://github.com/pocesar"
-  }],
+    }
+  ],
   "dependencies": {
-    "jsonparse": "1.x.x",
+    "bluebird": "^3.4.6",
     "debug": "2.x.x",
-    "lodash": "3.x.x",
     "es5class": "2.x.x",
-    "faye-websocket": "0.x.x",
     "eventemitter3": "1.x.x",
+    "faye-websocket": "0.x.x",
+    "jsonparse": "1.x.x",
+    "lodash": "3.x.x",
     "object-assign": "4.x"
   },
   "engines": {
