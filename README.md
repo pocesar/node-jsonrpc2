@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/pocesar/node-jsonrpc2.svg?branch=master)](https://travis-ci.org/pocesar/node-jsonrpc2)
+[![Coverage Status](https://coveralls.io/repos/github/pocesar/node-jsonrpc2/badge.svg?branch=master)](https://coveralls.io/github/pocesar/node-jsonrpc2?branch=master)
 
 [![NPM](https://nodei.co/npm/json-rpc2.svg?downloads=true)](https://nodei.co/npm/json-rpc2/)
 
@@ -233,7 +234,7 @@ client.call('echo', params, function (err, result) {
     if (err) { /* do something with error */ }
 
     // handle result
-    console.log(result); // in this case, 'Hello, Authorization!' 
+    console.log(result); // in this case, 'Hello, Authorization!'
 });
 
 server.setAuthType('jwt');
@@ -243,11 +244,11 @@ client.call('echo', params, function (err, result) {
     if (err) {/* do something with error */ }
 
     // handle result
-    console.log(result); // in this case, 'Hello, Authorization!' 
+    console.log(result); // in this case, 'Hello, Authorization!'
 });
 ```
-Switching between server authorization methods will use the provided authorization handler on the server side. 
-Switching between client authorization methods will use the provided authorization credentials. 
+Switching between server authorization methods will use the provided authorization handler on the server side.
+Switching between client authorization methods will use the provided authorization credentials.
 
 ## Extend, overwrite, overload
 

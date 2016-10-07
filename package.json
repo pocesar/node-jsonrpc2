@@ -1,6 +1,6 @@
 {
   "name": "json-rpc2",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "JSON-RPC 2.0 server and client library, with HTTP, TCP and Websocket endpoints",
   "main": "./src/jsonrpc.js",
   "keywords": [
@@ -30,16 +30,24 @@
   ],
   "dependencies": {
     "bluebird": "^3.4.6",
-    "debug": "2.x.x",
-    "es5class": "2.x.x",
-    "eventemitter3": "1.x.x",
-    "faye-websocket": "0.x.x",
-    "jsonparse": "1.x.x",
-    "lodash": "3.x.x",
-    "object-assign": "4.x"
+    "debug": "^2.2.0",
+    "es5class": "^2.3.1",
+    "eventemitter3": "^2.0.2",
+    "faye-websocket": "^0.11.0",
+    "jsonparse": "^1.2.0",
+    "lodash": "^4.16.4",
+    "object-assign": "^4.1.0"
+  },
+  "devDependencies": {
+    "mocha": "^3.1.0",
+    "expect.js": "^0.3.1",
+    "jshint": "^2.9.3",
+    "istanbul": "^0.4.5",
+    "coveralls": "^2.11.14",
+    "mocha-lcov-reporter": "^1.2.0"
   },
   "engines": {
-    "node": "0.10.x || 0.12.x"
+    "node": "4.x || 6.x"
   },
   "contributors": [
     "Bill Casarin <bill@casarin.ca> (jb55.com)",
@@ -53,14 +61,9 @@
   "bugs": {
     "url": "https://github.com/pocesar/node-jsonrpc2/issues"
   },
-  "devDependencies": {
-    "mocha": "2.x.x",
-    "expect.js": "0.x.x",
-    "jshint": "2.x.x",
-    "istanbul": "0.x.x"
-  },
   "scripts": {
     "test": "jshint examples src test && mocha test/*.js",
-    "coverage": "node ./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- -t 5000 test/jsonrpc-test.js"
+    "coverage": "istanbul cover ./node_modules/mocha/bin/_mocha -- -t 5000 test/jsonrpc-*.js",
+    "coveralls": "istanbul cover ./node_modules/mocha/bin/_mocha --report lcovonly -- -R spec test/jsonrpc-*.js && cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js && rm -rf ./coverage"
   }
 }

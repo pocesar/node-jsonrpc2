@@ -1,3 +1,5 @@
+var Promise = require('bluebird');
+
 module.exports = function (classes){
   'use strict';
 
@@ -22,25 +24,32 @@ module.exports = function (classes){
        * calls and responses are done in other places.
        */
       call     : function (method, params, callback){
-        if (!_.isArray(params)) {
-          params = [params];
-        }
+        var self = this;
 
-        var id = null;
-        if (_.isFunction(callback)) {
-          id = ++this.latestId;
-          this.callbacks[id] = callback;
-        }
+        return new Promise(function(resolve, reject){
+          if (!_.isArray(params)) {
+            params = [params];
+          }
 
-        EventEmitter.trace('-->', 'Connection call (method ' + method + '): ' + JSON.stringify(params));
+          var id = null;
 
-        var data = JSON.stringify({
-          jsonrpc: '2.0',
-          method : method,
-          params : params,
-          id     : id
-        });
-        this.write(data);
+          id = ++self.latestId;
+
+          self.callbacks[id] = {
+            resolve, reject
+          };
+
+          EventEmitter.trace('-->', 'Connection call (method ' + method + '): ' + JSON.stringify(params));
+
+          var data = JSON.stringify({
+            jsonrpc: '2.0',
+            method : method,
+            params : params,
+            id     : id
+          });
+
+          self.write(data);
+        }).nodeify(callback);
       },
 
       /**
@@ -78,7 +87,7 @@ module.exports = function (classes){
             ) {
             // Are we in the client?
             try {
-              this.callbacks[msg.id](msg.error, msg.result);
+              msg.error ? this.callbacks[msg.id].reject(new Error(msg.error)) : this.callbacks[msg.id].resolve(msg.result);
               delete this.callbacks[msg.id];
             } catch (err) {
               EventEmitter.trace('<---', 'Callback not found ' + msg.id + ': ' + (err.stack ? err.stack : err.toString()));

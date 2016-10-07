@@ -1,3 +1,8 @@
 .idea
 node_modules
 coverage
+test
+examples
+.travis.yml
+npm-debug.log
+.vscode

@@ -1,3 +1,5 @@
+var Promise = require('bluebird');
+
 module.exports = function (classes){
   'use strict';
 
@@ -52,24 +54,32 @@ module.exports = function (classes){
         return func;
       },
       handleCall: function (decoded, conn, callback){
-        EventEmitter.trace('<--', 'Request (id ' + decoded.id + '): ' +
-          decoded.method + '(' + JSON.stringify(decoded.params) + ')');
+        return new Promise(function(resolve, reject){
+          EventEmitter.trace('<--', 'Request (id ' + decoded.id + '): ' +
+            decoded.method + '(' + JSON.stringify(decoded.params) + ')');
 
-        if (!this.functions.hasOwnProperty(decoded.method)) {
-          callback(new Error.MethodNotFound('Unknown RPC call "' + decoded.method + '"'));
-          return;
-        }
+          if (!this.functions.hasOwnProperty(decoded.method)) {
+            reject(new Error.MethodNotFound('Unknown RPC call "' + decoded.method + '"'));
+            return;
+          }
 
-        var method = this.functions[decoded.method];
-        var scope = this.scopes[decoded.method] || this.defaultScope;
+          var method = this.functions[decoded.method];
+          var scope = this.scopes[decoded.method] || this.defaultScope;
 
-        // Try to call the method, but intercept errors and call our
-        // error handler.
-        try {
-          method.call(scope, decoded.params, conn, callback);
-        } catch (err) {
-          callback(err);
-        }
+          // Try to call the method, but intercept errors and call our
+          // error handler.
+          try {
+            resolve(method.call(scope, decoded.params, conn, function(err, result){
+              if (err){
+                return Promise.reject(err);
+              }
+
+              return Promise.resolve(result);
+            }));
+          } catch (err) {
+            reject(err);
+          }
+        }).nodeify(callback).bind(this);
       }
     });
 

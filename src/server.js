@@ -1,13 +1,13 @@
+var net = require('net');
+var http = require('http');
+var extend = require('object-assign');
+var JsonParser = require('jsonparse');
+var Promise = require('bluebird');
+
 module.exports = function (classes) {
   'use strict';
 
   var
-    net = require('net'),
-    http = require('http'),
-    extend = require('object-assign'),
-    JsonParser = require('jsonparse'),
-    Promise = require('bluebird'),
-
     // Authorization Type Constants
     // other types to be added
     Authorization = {
@@ -84,8 +84,6 @@ module.exports = function (classes) {
             authHeader = self._getAuthHeader(req), // get the header
             authToken = self._getAuthValue(authHeader); // get the token
 
-          var promisifiedAuthHandler = Promise.method(self.authHandler); // promisify for the sync implementation method
-
           switch (this.authType) {
             case Authorization.BASIC:
               var
@@ -95,8 +93,8 @@ module.exports = function (classes) {
                   password = parts[1];
 
               // i think it introduces some performance degradation due to double promisification.
-              // i also think it might be negligible 
-              return promisifiedAuthHandler(username, password, function callback(err, result) {
+              // i also think it might be negligible
+              return self.authHandler(username, password, function callback(err, result) {
                 if (err) {
                   return Promise.reject(err);
                 }
@@ -105,7 +103,7 @@ module.exports = function (classes) {
 
             case Authorization.COOKIE:
             case Authorization.JWT:
-              return promisifiedAuthHandler(authToken, function callback(err, result) {
+              return self.authHandler(authToken, function callback(err, result) {
                 if (err) {
                   return Promise.reject(err);
                 }
@@ -114,26 +112,31 @@ module.exports = function (classes) {
           }
         } else {
           // Handle case for non auth server
-          return new Promise(function (resolve) {
-            resolve(true);
-          });
+          return Promise.resolve(true);
         }
       },
       _handleUnauthorized: function (req, res) {
-        var self = this;
         classes.EventEmitter.trace('<--', 'Unauthorized request');
-        Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED), self.opts.headers);      
+        throw new Error.InvalidParams(UNAUTHORIZED);
       },
       /**
        * Start listening to incoming connections.
        */
       listen: function (port, host) {
-        var
-          self = this,
-          server = http.createServer();
+        var self = this;
+        var server = http.createServer();
 
         server.on('request', function onRequest(req, res) {
-          self.handleHttp(req, res);
+          self.handleHttp(req, res)
+          .then(function(){
+          })
+          .catch(Error.ParseError, function(err){
+            Server.handleHttpError(req, res, err, self.opts.headers);
+          })
+          .catch(Error.InvalidRequest, function(err){
+            Server.handleHttpError(req, res, err, self.opts.headers);
+          })
+          ;
         });
 
         if (port) {
@@ -147,14 +150,20 @@ module.exports = function (classes) {
             if (WebSocket.isWebSocket(req)) {
               self._checkAuth(req, socket).then(function (result) {
                 if (result) {
-                  self.handleWebsocket(req, socket, body);
+                  return self.handleWebsocket(req, socket, body).then(function(result){
+                    return conn.handleMessage(result);
+                  });
                 } else {
                   self._handleUnauthorized(req, socket);
                 }
-              }).catch(function (err) { 
+              })
+              .catch(Error.InvalidParams, function (err) {
+                Server.handleHttpError(req, socket, err, self.opts.headers);
+              })
+              .catch(function (err) {
                 // handle internal server error from Check Authorization
                 classes.EventEmitter.trace('<--', 'Internal Server Error');
-                Server.handleHttpError(req, socket, new Error.InternalError(err.message), self.opts.headers);  
+                Server.handleHttpError(req, socket, new Error.InternalError(err.message), self.opts.headers);
               });
             }
           });
@@ -167,7 +176,9 @@ module.exports = function (classes) {
         var
           self = this,
           server = net.createServer(function createServer(socket) {
-            self.handleRaw(socket);
+            self.handleRaw(socket).then(function(){
+
+            });
           });
 
         server.listen(port, host);
@@ -183,7 +194,9 @@ module.exports = function (classes) {
           self = this,
           httpServer = self.listen(),
           server = net.createServer(function createServer(socket) {
-            self.handleHybrid(httpServer, socket);
+            self.handleHybrid(httpServer, socket).then(function(){
+
+            });
           });
 
         server.listen(port, host);
@@ -197,226 +210,240 @@ module.exports = function (classes) {
       /**
        * Handle HTTP POST request.
        */
-      handleHttp: function (req, res) {
-        var buffer = '', self = this;
-        var headers;
-        if (req.method === 'OPTIONS') {
-          headers = {
-            'Content-Length': 0,
-            'Access-Control-Allow-Headers': 'Accept, Authorization, Content-Type'
-          };
-          headers = extend({}, headers, self.opts.headers);
-          res.writeHead(200, headers);
-          res.end();
-          return;
-        }
+      handleHttp: function (req, res, callback) {
+        var self = this;
 
-        if (req.method !== 'POST') {
-          Server.handleHttpError(req, res, new Error.InvalidRequest(METHOD_NOT_ALLOWED), self.opts.headers);
-          return;
-        }
-        
+        return new Promise(function(resolve, reject){
 
-        var handle = function handle(buf) {
-          // Check if json is valid JSON document
-          var decoded;
+          var buffer = '';
+          var headers;
 
-          try {
-            decoded = JSON.parse(buf);
-          } catch (error) {
-            Server.handleHttpError(req, res, new Error.ParseError(INVALID_REQUEST), self.opts.headers);
-            return;
-          }
-
-          // Check for the required fields, and if they aren't there, then
-          // dispatch to the handleHttpError function.
-          if (!decoded.method || !decoded.params) {
-            Endpoint.trace('-->', 'Response (invalid request)');
-            Server.handleHttpError(req, res, new Error.InvalidRequest(INVALID_REQUEST), self.opts.headers);
-            return;
-          }
-
-          var reply = function reply(json) {
-            var encoded;
+          if (req.method === 'OPTIONS') {
             headers = {
-              'Content-Type': 'application/json'
+              'Content-Length': 0,
+              'Access-Control-Allow-Headers': 'Accept, Authorization, Content-Type'
             };
-
-            if (json) {
-              encoded = JSON.stringify(json);
-              headers['Content-Length'] = Buffer.byteLength(encoded, 'utf-8');
-            } else {
-              encoded = '';
-              headers['Content-Length'] = 0;
-            }
-
             headers = extend({}, headers, self.opts.headers);
+            res.writeHead(200, headers);
+            res.end();
+            return resolve();
+          }
 
-            if (!conn.isStreaming) {
-              res.writeHead(200, headers);
-              res.write(encoded);
-              res.end();
-            } else {
-              res.writeHead(200, headers);
-              res.write(encoded);
-              // Keep connection open
+          if (req.method !== 'POST') {
+            return reject(new Error.InvalidRequest(METHOD_NOT_ALLOWED));
+          }
+
+          var handle = function handle(buf) {
+            // Check if json is valid JSON document
+            var decoded;
+
+            try {
+              decoded = JSON.parse(buf);
+            } catch (error) {
+              return reject(new Error.ParseError(INVALID_REQUEST));
             }
-          };
 
-          var callback = function callback(err, result) {
-            var response;
+            // Check for the required fields, and if they aren't there, then
+            // dispatch to the handleHttpError function.
+            if (!decoded.method || !decoded.params) {
+              Endpoint.trace('-->', 'Response (invalid request)');
+              return reject(new Error.InvalidRequest(INVALID_REQUEST));
+            }
 
-            if (err) {
+            var reply = function reply(json) {
+              var encoded;
+              headers = {
+                'Content-Type': 'application/json'
+              };
 
-              self.emit('error', err);
-
-              Endpoint.trace('-->', 'Failure (id ' + decoded.id + '): ' +
-                (err.stack ? err.stack : err.toString()));
-
-              result = null;
-
-              if (!(err instanceof Error.AbstractError)) {
-                err = new Error.InternalError(err.toString());
+              if (json) {
+                encoded = JSON.stringify(json);
+                headers['Content-Length'] = Buffer.byteLength(encoded, 'utf-8');
+              } else {
+                encoded = '';
+                headers['Content-Length'] = 0;
               }
 
-              response = {
-                'jsonrpc': '2.0',
-                'error': {code: err.code, message: err.message }
-              };
+              headers = extend({}, headers, self.opts.headers);
+
+              if (!conn.isStreaming) {
+                res.writeHead(200, headers);
+                res.write(encoded);
+                res.end();
+              } else {
+                res.writeHead(200, headers);
+                res.write(encoded);
+                // Keep connection open
+              }
+            };
+
+            var callback = function callback(err, result) {
+              var response;
+
+              if (err) {
+
+                self.emit('error', err);
+
+                Endpoint.trace('-->', 'Failure (id ' + decoded.id + '): ' +
+                  (err.stack ? err.stack : err.toString()));
+
+                result = null;
+
+                if (!(err instanceof Error.AbstractError)) {
+                  err = new Error.InternalError(err.toString());
+                }
+
+                response = {
+                  'jsonrpc': '2.0',
+                  'error': {code: err.code, message: err.message }
+                };
+
+              } else {
+                Endpoint.trace('-->', 'Response (id ' + decoded.id + '): ' +
+                  JSON.stringify(result));
+
+                response = {
+                  'jsonrpc': '2.0',
+                  'result': typeof(result) === 'undefined' ? null : result
+                };
+              }
+
+              // Don't return a message if it doesn't have an ID
+              if (Endpoint.hasId(decoded)) {
+                response.id = decoded.id;
+                reply(response);
+              } else {
+                reply();
+              }
+            };
+
+            var conn = new classes.HttpServerConnection(self, req, res);
+
+            self.handleCall(decoded, conn, callback);
+          }; // function handle(buf)
+
+          self._checkAuth(req, res).then(function (result) {
+            if (result) {  // successful authorization
+              Endpoint.trace('<--', 'Accepted http request');
+
+              req.on('data', function requestData(chunk) {
+                buffer = buffer + chunk;
+              });
+
+              req.on('end', function requestEnd() {
+                handle(buffer);
+              });
 
             } else {
-              Endpoint.trace('-->', 'Response (id ' + decoded.id + '): ' +
-                JSON.stringify(result));
-
-              response = {
-                'jsonrpc': '2.0',
-                'result': typeof(result) === 'undefined' ? null : result
-              };
+              self._handleUnauthorized(req, res);
             }
-
-            // Don't return a message if it doesn't have an ID
-            if (Endpoint.hasId(decoded)) {
-              response.id = decoded.id;
-              reply(response);
-            } else {
-              reply();
-            }
-          };
-
-          var conn = new classes.HttpServerConnection(self, req, res);
-
-          self.handleCall(decoded, conn, callback);
-        }; // function handle(buf)
-
-        self._checkAuth(req, res).then(function (result) {
-          if (result) {  // successful authorization
-            Endpoint.trace('<--', 'Accepted http request');
-
-            req.on('data', function requestData(chunk) {
-              buffer = buffer + chunk;
-            });
-
-            req.on('end', function requestEnd() {
-              handle(buffer);
-            });
-            
-          } else {
-            self._handleUnauthorized(req, res);
-            return;
-          }
-        }).catch(function (err) {
-          // handle Internal Server Error from Check authorization
-          classes.EventEmitter.trace('<--', 'Internal Server Error');
-          Server.handleHttpError(req, res, new Error.InternalError(err.message), self.opts.headers);
-          return;
-        });
+          }).catch(function (err) {
+            // handle Internal Server Error from Check authorization
+            classes.EventEmitter.trace('<--', 'Internal Server Error');
+            reject(new Error.InternalError(err.message));
+          });
+        }).nodeify(callback).bind(this);
       },
 
       handleRaw: function (socket) {
-        var self = this, conn, parser, requireAuth;
+        var self = this;
 
-        Endpoint.trace('<--', 'Accepted socket connection');
+        return new Promise(function(resolve, reject){
+          var conn;
+          var parser;
+          var requireAuth;
 
-        conn = new classes.SocketConnection(self, socket);
-        parser = new JsonParser();
-        requireAuth = !!this.authHandler;
+          Endpoint.trace('<--', 'Accepted socket connection');
 
-        parser.onValue = function (decoded) {
-          if (this.stack.length) {
-            return;
-          }
+          conn = new classes.SocketConnection(self, socket);
+          parser = new JsonParser();
+          requireAuth = !!this.authHandler;
 
-          // We're on a raw TCP socket. To enable authentication we implement a simple
-          // authentication scheme that is non-standard, but is easy to call from any
-          // client library.
-          //
-          // The authentication message is to be sent as follows:
-          //   {'method': 'auth', 'params': ['myuser', 'mypass'], id: 0}
-          if (requireAuth) {
-            if (decoded.method !== 'auth') {
-              // Try to notify client about failure to authenticate
-              if (Endpoint.hasId(decoded)) {
-                conn.sendReply('Error: Unauthorized', null, decoded.id);
-              }
-            } else {
-              // Handle 'auth' message
-              if (_.isArray(decoded.params) &&
-                decoded.params.length === 2 &&
-                self.authHandler(decoded.params[0], decoded.params[1])) {
-                // Authorization completed
-                requireAuth = false;
+          parser.onValue = function (decoded) {
+            if (this.stack.length) {
+              return;
+            }
 
-                // Notify client about success
+            // We're on a raw TCP socket. To enable authentication we implement a simple
+            // authentication scheme that is non-standard, but is easy to call from any
+            // client library.
+            //
+            // The authentication message is to be sent as follows:
+            //   {'method': 'auth', 'params': ['myuser', 'mypass'], id: 0}
+            if (requireAuth) {
+              if (decoded.method !== 'auth') {
+                // Try to notify client about failure to authenticate
                 if (Endpoint.hasId(decoded)) {
-                  conn.sendReply(null, true, decoded.id);
+                  conn.sendReply('Error: Unauthorized', null, decoded.id);
+                  reject(new Error.InvalidParams(UNAUTHORIZED))
                 }
               } else {
-                if (Endpoint.hasId(decoded)) {
-                  conn.sendReply('Error: Invalid credentials', null, decoded.id);
+                // Handle 'auth' message
+                if (_.isArray(decoded.params) &&
+                  decoded.params.length === 2) {
+                  self.authHandler(decoded.params[0], decoded.params[1]).then(function(){
+                    // Authorization completed
+                    requireAuth = false;
+
+                    // Notify client about success
+                    if (Endpoint.hasId(decoded)) {
+                      conn.sendReply(null, true, decoded.id);
+                    }
+                  }).catch(reject)
+                } else {
+                  if (Endpoint.hasId(decoded)) {
+                    conn.sendReply('Error: Invalid credentials', null, decoded.id);
+                    reject(new Error.InvalidParams(UNAUTHORIZED))
+                  }
                 }
               }
+              // Make sure we explicitly return here - the client was not yet auth'd.
+            } else {
+              resolve(conn.handleMessage(decoded));
             }
-            // Make sure we explicitly return here - the client was not yet auth'd.
-            return;
-          } else {
-            conn.handleMessage(decoded);
-          }
-        };
+          };
 
-        socket.on('data', function (chunk) {
-          try {
-            parser.write(chunk);
-          } catch (err) {
-            // TODO: Is ignoring invalid data the right thing to do?
-          }
+          socket.on('data', function (chunk) {
+            try {
+              parser.write(chunk);
+            } catch (err) {
+              // TODO: Is ignoring invalid data the right thing to do?
+            }
+          });
         });
       },
 
       handleWebsocket: function (request, socket, body) {
-        var self = this, conn, parser;
+        var self = this;
 
-        socket = new WebSocket(request, socket, body);
+        return new Promise(function(resolve, reject){
+          var conn;
+          var parser;
 
-        Endpoint.trace('<--', 'Accepted Websocket connection');
+          socket = new WebSocket(request, socket, body);
 
-        conn = new classes.WebSocketConnection(self, socket);
-        parser = new JsonParser();
+          Endpoint.trace('<--', 'Accepted Websocket connection');
 
-        parser.onValue = function (decoded) {
-          if (this.stack.length) {
-            return;
-          }
+          conn = new classes.WebSocketConnection(self, socket);
+          parser = new JsonParser();
 
-          conn.handleMessage(decoded);
-        };
+          parser.onValue = function (decoded) {
+            if (this.stack.length) {
+              return;
+            }
 
-        socket.on('message', function (event) {
-          try {
-            parser.write(event.data);
-          } catch (err) {
-            // TODO: Is ignoring invalid data the right thing to do?
-          }
-        });
+            resolve(decoded);
+          };
+
+          socket.on('message', function (event) {
+            try {
+              parser.write(event.data);
+            } catch (err) {
+              // TODO: Is ignoring invalid data the right thing to do?
+            }
+          });
+        })
+
       },
 
       handleHybrid: function (httpServer, socket) {
@@ -429,9 +456,10 @@ module.exports = function (classes) {
             http._connectionListener.call(httpServer, socket);
             socket.ondata(chunk, 0, chunk.length);
           } else {
-            self.handleRaw(socket);
-            // Re-emit first chunk
-            socket.emit('data', chunk);
+            self.handleRaw(socket).then(function(){
+              // Re-emit first chunk
+              socket.emit('data', chunk);
+            })
           }
         });
       },
@@ -459,7 +487,9 @@ module.exports = function (classes) {
 
         this.authType = Authorization.BASIC;
         this.basicHandler = handler;
-        this.authHandler = this.basicHandler;
+        this.authHandler = Promise.method(this.basicHandler);
+
+        return this;
       },
       /**
        * Set the server to require basic authorization through old handler.
@@ -468,6 +498,8 @@ module.exports = function (classes) {
        */
       enableAuth: function (handler, password) {
         this.enableBasicAuth(handler, password);
+
+        return this;
       },
       /**
        * Set the server to require cookie authorization.
@@ -484,8 +516,10 @@ module.exports = function (classes) {
         if (_.isFunction(handler)) {
           this.authType = Authorization.COOKIE;
           this.cookieHandler = handler;
-          this.authHandler = this.cookieHandler;
+          this.authHandler = Promise.method(this.cookieHandler);
         }
+
+        return this;
       },
       /**
        * Set the server to require Bearer (JWT) authorization.
@@ -500,8 +534,10 @@ module.exports = function (classes) {
         if (_.isFunction(handler)) {
           this.authType = Authorization.JWT;
           this.jwtHandler = handler;
-          this.authHandler = this.jwtHandler;
+          this.authHandler = Promise.method(this.jwtHandler);
         }
+
+        return this;
       },
       /**
        * Set Authorization Type.
@@ -517,15 +553,15 @@ module.exports = function (classes) {
           this.authType = type;
           switch (this.authType) {
             case Authorization.BASIC:
-              this.authHandler = this.basicHandler;
+              this.authHandler = Promise.method(this.basicHandler);
             break;
 
             case Authorization.COOKIE:
-              this.authHandler = this.cookieHandler;
+              this.authHandler = Promise.method(this.cookieHandler);
             break;
 
             case Authorization.JWT:
-              this.authHandler = this.jwtHandler;
+              this.authHandler = Promise.method(this.jwtHandler);
             break;
 
             default:
@@ -533,6 +569,8 @@ module.exports = function (classes) {
             break;
           }
         }
+
+        return this;
       }
     }, {
       /**
