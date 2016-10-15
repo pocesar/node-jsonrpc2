@@ -51,8 +51,8 @@ server.exposeModule('delayed', {
   }
 );
 
-// or server.enableAuth('myuser', 'secret123');
-server.enableAuth(function(user, password){
+// or server.enableBasicAuth('myuser', 'secret123');
+server.enableBasicAuth(function(user, password){
   return user === 'myuser' && password === 'secret123';
 });
 

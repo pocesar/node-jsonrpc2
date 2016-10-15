@@ -6,6 +6,16 @@ module.exports = function (classes) {
     http = require('http'),
     extend = require('object-assign'),
     JsonParser = require('jsonparse'),
+    Promise = require('bluebird'),
+
+    // Authorization Type Constants
+    // other types to be added
+    Authorization = {
+      NONE: 'none',
+      BASIC: 'basic',
+      COOKIE: 'cookie',
+      JWT: 'jwt'
+    },
 
     UNAUTHORIZED = 'Unauthorized',
     METHOD_NOT_ALLOWED = 'Invalid Request',
@@ -26,28 +36,93 @@ module.exports = function (classes) {
         this.opts.type = typeof this.opts.type !== 'undefined' ? this.opts.type : 'http';
         this.opts.headers = this.opts.headers || {};
         this.opts.websocket = typeof this.opts.websocket !== 'undefined' ? this.opts.websocket : true;
+
+        // Authorization
+        this.authType = Authorization.NONE;
+        this.authHandler = null;
+        this.basicHandler = null;
+        this.jwtHandler = null;
+        this.cookieHandler = null;
       },
-      _checkAuth: function (req, res) {
+      _getAuthHeader: function (req) {
+        var authHeader = null;
+        switch (this.authType) {
+
+          case Authorization.BASIC:
+          case Authorization.JWT:
+            authHeader = req.headers['authorization'] || '';
+          break;
+
+          case Authorization.COOKIE:
+            authHeader = req.headers['cookie'] || '';
+          break;
+        }
+
+        return authHeader;
+      },
+      _getAuthValue: function(header) {
+        var value = null;
+        switch (this.authType) {
+
+          case Authorization.BASIC:
+          case Authorization.JWT:
+            value = header.split(/\s+/).pop() || '';
+          break;
+
+          case Authorization.COOKIE:
+            value = header;
+          break;
+        }
+
+        return value;
+      },
+      _checkAuth: function (req) {
         var self = this;
 
         if (self.authHandler) {
           var
-            authHeader = req.headers['authorization'] || '', // get the header
-            authToken = authHeader.split(/\s+/).pop() || '', // get the token
-            auth = new Buffer(authToken, 'base64').toString(), // base64 -> string
-            parts = auth.split(/:/), // split on colon
-            username = parts[0],
-            password = parts[1];
+            authHeader = self._getAuthHeader(req), // get the header
+            authToken = self._getAuthValue(authHeader); // get the token
 
-          if (!this.authHandler(username, password)) {
-            if (res) {
-              classes.EventEmitter.trace('<--', 'Unauthorized request');
-              Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED), self.opts.headers);
-            }
-            return false;
+          var promisifiedAuthHandler = Promise.method(self.authHandler); // promisify for the sync implementation method
+
+          switch (this.authType) {
+            case Authorization.BASIC:
+              var
+                  auth = new Buffer(authToken, 'base64').toString(), // base64 -> string
+                  parts = auth.split(/:/), // split on colon
+                  username = parts[0],
+                  password = parts[1];
+
+              // i think it introduces some performance degradation due to double promisification.
+              // i also think it might be negligible 
+              return promisifiedAuthHandler(username, password, function callback(err, result) {
+                if (err) {
+                  return Promise.reject(err);
+                }
+                return Promise.resolve(result);
+              });
+
+            case Authorization.COOKIE:
+            case Authorization.JWT:
+              return promisifiedAuthHandler(authToken, function callback(err, result) {
+                if (err) {
+                  return Promise.reject(err);
+                }
+                return Promise.resolve(result);
+              });
           }
+        } else {
+          // Handle case for non auth server
+          return new Promise(function (resolve) {
+            resolve(true);
+          });
         }
-        return true;
+      },
+      _handleUnauthorized: function (req, res) {
+        var self = this;
+        classes.EventEmitter.trace('<--', 'Unauthorized request');
+        Server.handleHttpError(req, res, new Error.InvalidParams(UNAUTHORIZED), self.opts.headers);      
       },
       /**
        * Start listening to incoming connections.
@@ -70,9 +145,17 @@ module.exports = function (classes) {
         if (this.opts.websocket === true) {
           server.on('upgrade', function onUpgrade(req, socket, body) {
             if (WebSocket.isWebSocket(req)) {
-              if (self._checkAuth(req, socket)) {
-                self.handleWebsocket(req, socket, body);
-              }
+              self._checkAuth(req, socket).then(function (result) {
+                if (result) {
+                  self.handleWebsocket(req, socket, body);
+                } else {
+                  self._handleUnauthorized(req, socket);
+                }
+              }).catch(function (err) { 
+                // handle internal server error from Check Authorization
+                classes.EventEmitter.trace('<--', 'Internal Server Error');
+                Server.handleHttpError(req, socket, new Error.InternalError(err.message), self.opts.headers);  
+              });
             }
           });
         }
@@ -117,7 +200,6 @@ module.exports = function (classes) {
       handleHttp: function (req, res) {
         var buffer = '', self = this;
         var headers;
-
         if (req.method === 'OPTIONS') {
           headers = {
             'Content-Length': 0,
@@ -129,16 +211,11 @@ module.exports = function (classes) {
           return;
         }
 
-        if (!self._checkAuth(req, res)) {
-          return;
-        }
-
-        Endpoint.trace('<--', 'Accepted http request');
-
         if (req.method !== 'POST') {
           Server.handleHttpError(req, res, new Error.InvalidRequest(METHOD_NOT_ALLOWED), self.opts.headers);
           return;
         }
+        
 
         var handle = function handle(buf) {
           // Check if json is valid JSON document
@@ -188,6 +265,7 @@ module.exports = function (classes) {
 
           var callback = function callback(err, result) {
             var response;
+
             if (err) {
 
               self.emit('error', err);
@@ -230,12 +308,27 @@ module.exports = function (classes) {
           self.handleCall(decoded, conn, callback);
         }; // function handle(buf)
 
-        req.on('data', function requestData(chunk) {
-          buffer = buffer + chunk;
-        });
+        self._checkAuth(req, res).then(function (result) {
+          if (result) {  // successful authorization
+            Endpoint.trace('<--', 'Accepted http request');
 
-        req.on('end', function requestEnd() {
-          handle(buffer);
+            req.on('data', function requestData(chunk) {
+              buffer = buffer + chunk;
+            });
+
+            req.on('end', function requestEnd() {
+              handle(buffer);
+            });
+            
+          } else {
+            self._handleUnauthorized(req, res);
+            return;
+          }
+        }).catch(function (err) {
+          // handle Internal Server Error from Check authorization
+          classes.EventEmitter.trace('<--', 'Internal Server Error');
+          Server.handleHttpError(req, res, new Error.InternalError(err.message), self.opts.headers);
+          return;
         });
       },
 
@@ -344,17 +437,17 @@ module.exports = function (classes) {
       },
 
       /**
-       * Set the server to require authentication.
+       * Set the server to require basic authentication.
        *
        * Can be called with a custom handler function:
-       *   server.enableAuth(function (user, password) {
+       *   server.enableBasicAuth(function (user, password) {
        *     return true; // Do authentication and return result as boolean
        *   });
        *
        * Or just with a single valid username and password:
-       *   sever.enableAuth(''myuser'', ''supersecretpassword'');
+       *   sever.enableBasicAuth(''myuser'', ''supersecretpassword'');
        */
-      enableAuth: function (handler, password) {
+      enableBasicAuth: function (handler, password) {
         if (!_.isFunction(handler)) {
           var user = '' + handler;
           password = '' + password;
@@ -364,7 +457,82 @@ module.exports = function (classes) {
           };
         }
 
-        this.authHandler = handler;
+        this.authType = Authorization.BASIC;
+        this.basicHandler = handler;
+        this.authHandler = this.basicHandler;
+      },
+      /**
+       * Set the server to require basic authorization through old handler.
+       * (Deprecating)
+       *
+       */
+      enableAuth: function (handler, password) {
+        this.enableBasicAuth(handler, password);
+      },
+      /**
+       * Set the server to require cookie authorization.
+       *
+       * Can be called with a custom handler function:
+       *   server.enableCookieAuth(function cookieAuthHandler(cookie) {
+       *     // handle cookie authorization through a server or middleware
+       *     return true;
+       *   }
+       *
+       *
+       */
+      enableCookieAuth: function (handler) {
+        if (_.isFunction(handler)) {
+          this.authType = Authorization.COOKIE;
+          this.cookieHandler = handler;
+          this.authHandler = this.cookieHandler;
+        }
+      },
+      /**
+       * Set the server to require Bearer (JWT) authorization.
+       *
+       * Can be called with a custom handler function:
+       *   server.enableJWTAuth(function jwtAuthHandler(token) {
+       *     // handle jwt authorization through server or middleware
+       *     return true;
+       *   }
+       */
+      enableJWTAuth: function (handler) {
+        if (_.isFunction(handler)) {
+          this.authType = Authorization.JWT;
+          this.jwtHandler = handler;
+          this.authHandler = this.jwtHandler;
+        }
+      },
+      /**
+       * Set Authorization Type.
+       *
+       * Switch between two authorization types (Basic/Cookie), after they have
+       * been initialized.
+       * One must enable at least two authorization types with proper handler
+       * before switching/setting to another Auth Type.
+       */
+      setAuthType: function (type) {
+        type = type.toLowerCase();
+        if (type && (_.values(Authorization).indexOf(type) > -1)) {
+          this.authType = type;
+          switch (this.authType) {
+            case Authorization.BASIC:
+              this.authHandler = this.basicHandler;
+            break;
+
+            case Authorization.COOKIE:
+              this.authHandler = this.cookieHandler;
+            break;
+
+            case Authorization.JWT:
+              this.authHandler = this.jwtHandler;
+            break;
+
+            default:
+              this.authHandler = null;
+            break;
+          }
+        }
       }
     }, {
       /**

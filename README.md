@@ -86,6 +86,169 @@ server.enableAuth('user', 'pass');
 server.listenRaw(8080, 'localhost');
 ```
 
+Basic Authorization Communication
+
+```js
+var rpc = require('json-rpc2');
+
+var server = rpc.Server.$create({
+    'websocket': true
+});
+
+server.define('echo', function (opts, args, callback) {
+    // function callback(error, result)
+    callback(null, args[0]);
+});
+
+// enableAuth will deprecate in the future
+// enableAuth can still be used, the new function is
+server.enableBasicAuth('user', 'pass');
+serverHandler = server.listen(8088, 'localhost');
+
+client = rpc.Client.$create(8088, 'localhost');
+client.basicAuth('user', 'pass');
+
+var params = ['Hello!, Authorization!'];
+client.call('echo', params, function (err, result) {
+    if (err) { /* do something with error */ }
+    // do something with result
+    console.log(result); // in this case, 'Hello, Authorization!'
+});
+
+serverHandler.close();
+server = null;
+client = null;
+```
+
+Cookie Authorization Communication
+
+```js
+var rpc = require('json-rpc2');
+
+var server = rpc.Server.$create({
+    'websocket': true
+});
+
+server.define('echo', function (opts, args, callback) {
+    // function callback(error, result)
+    callback(null, args[0]);
+});
+
+server.enableCookieAuth(function (cookieValue) {
+    // do call to user service or pass it to middleware
+    return (cookieValue === 'validCookieValue');
+});
+serverHandler = server.listen(8088, 'localhost');
+
+client = rpc.Client.$create(8088, 'localhost');
+client.cookieAuth('validCookieValue');
+
+var params = ['Hello!, Authorization!'];
+client.call('echo', params, function (err, result) {
+    if (err) { /* do something with error */ }
+    // do something with result
+    console.log(result); // in this case, 'Hello, Authorization!'
+});
+
+serverHandler.close();
+server = null;
+client = null;
+```
+
+Bearer(JWT) Authorization Communication
+
+```js
+var rpc = require('json-rpc2');
+
+var server = rpc.Server.$create({
+    'websocket': true
+});
+
+server.define('echo', function (opts, args, callback) {
+    // function callback(error, result)
+    callback(null, args[0]);
+});
+
+server.enableJWTAuth(function (tokenValue) {
+    // do call to user service or pass it to middleware
+    return (cookieValue === 'validCookieValue');
+});
+serverHandler = server.listen(8088, 'localhost');
+
+client = rpc.Client.$create(8088, 'localhost');
+client.jwtAuth('validTokenValue');
+
+var params = ['Hello!, Authorization!'];
+client.call('echo', params, function (err, result) {
+    if (err) { /* do something with error */ }
+
+    // do something with result
+    console.log(result); // in this case, 'Hello, Authorization!'
+});
+
+serverHandler.close();
+server = null;
+client = null;
+```
+
+Switching between Authorization Methods
+
+```js
+var rpc = require('json-rpc2');
+
+var server = rpc.Server.$create({
+    'websocket': true
+});
+
+server.define('echo', function (opts, args, callback) {
+    // function callback(error, result)
+    callback(null, args[0]);
+});
+
+server.listen(8088, 'localhost');
+
+// Server Authorization
+server.enableBasicAuth('user', 'pass');
+server.enableCookieAuth(function (cookieValue) {
+    // handle cookie validity through a user service or middleware
+    return (cookieValue === 'validCookieValue');
+});
+server.enableJWTAuth(function (tokenValue) {
+    // handle JWT token validity through a user service or middleware
+    return (tokenValue === 'validTokenValue');
+});
+
+// Client Authorization
+client = rpc.Client.$create(8088, 'localhost');
+client.basicAuth('user', 'pass');
+client.cookieAuth('validCookieValue');
+client.jwtAuth('validTokenValue');
+
+// Switch Authorization Methods
+server.setAuthType('basic');
+client.setAuthType('basic');
+
+var params = ['Hello, Authorization!'];
+client.call('echo', params, function (err, result) {
+    if (err) { /* do something with error */ }
+
+    // handle result
+    console.log(result); // in this case, 'Hello, Authorization!' 
+});
+
+server.setAuthType('jwt');
+client.setAuthType('jwt');
+
+client.call('echo', params, function (err, result) {
+    if (err) {/* do something with error */ }
+
+    // handle result
+    console.log(result); // in this case, 'Hello, Authorization!' 
+});
+```
+Switching between server authorization methods will use the provided authorization handler on the server side. 
+Switching between client authorization methods will use the provided authorization credentials. 
+
 ## Extend, overwrite, overload
 
 Any class can be extended, or used as a mixin for new classes, since it uses [ES5Class](http://github.com/pocesar/ES5-Class) module.
