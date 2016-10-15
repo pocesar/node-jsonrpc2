@@ -1,4 +1,4 @@
-'use strict';
+  'use strict';
 
 var
   expect = require('expect.js'),
@@ -111,7 +111,7 @@ module.exports = {
       'GET Server handle NonPOST': function (done) {
         var req = new MockRequest('GET');
         var res = new MockResponse();
-        server.handleHttp(req, res).then(function (result) {
+        server.handleHttp(req, res).then(function () {
         }).catch(function (err) {
           expect(err.id).to.equal(undefined);
           expect(err.message).to.equal('Invalid Request');
@@ -124,7 +124,7 @@ module.exports = {
       'Method throw an error': function (done) {
         var req = new MockRequest('POST');
         var res = new MockResponse();
-
+        
         server.handleHttp(req, res).then(function (result) {
           var decoded = JSON.parse(result.httpBody); 
           expect(decoded.id).to.equal(1);
@@ -149,7 +149,7 @@ module.exports = {
         var req = new MockRequest('POST');
         var res = new MockResponse();
         server.handleHttp(req, res).then(function (result) {
-          var decoded = JSON.parse(res.httpBody);
+          var decoded = JSON.parse(result.httpBody);
           expect(decoded.id).to.equal(1);
           expect(decoded.error.message).to.equal('InternalError');
           expect(decoded.error.code).to.equal(-32603);  

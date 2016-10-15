@@ -36,7 +36,8 @@ module.exports = function (classes){
           id = ++self.latestId;
 
           self.callbacks[id] = {
-            resolve, reject
+            'resolve': resolve, 
+            'reject' : reject
           };
 
           EventEmitter.trace('-->', 'Connection call (method ' + method + '): ' + JSON.stringify(params));
@@ -87,7 +88,11 @@ module.exports = function (classes){
             ) {
             // Are we in the client?
             try {
-              msg.error ? this.callbacks[msg.id].reject(new Error(msg.error)) : this.callbacks[msg.id].resolve(msg.result);
+              if (msg.error) {
+                this.callbacks[msg.id].reject(new Error(msg.error));
+              } else {
+                this.callbacks[msg.id].resolve(msg.result);
+              }
               delete this.callbacks[msg.id];
             } catch (err) {
               EventEmitter.trace('<---', 'Callback not found ' + msg.id + ': ' + (err.stack ? err.stack : err.toString()));

@@ -120,7 +120,7 @@ module.exports = function (classes) {
           return Promise.resolve(true);
         }
       },
-      _handleUnauthorized: function (req, res) {
+      _handleUnauthorized: function () {
         classes.EventEmitter.trace('<--', 'Unauthorized request');
         throw new Error.InvalidParams(UNAUTHORIZED);
       },
@@ -132,7 +132,7 @@ module.exports = function (classes) {
         var server = http.createServer();
 
         server.on('request', function onRequest(req, res) {
-          self.handleHttp(req, res).then(function (result) {
+          self.handleHttp(req, res).then(function () {
           }).catch(function (err) {
             Server.handleHttpError(req, res, err, self.opts.headers);            
           });
@@ -151,10 +151,10 @@ module.exports = function (classes) {
               self._checkAuth(req, socket).then(function (result) {
                 if (result) {
                   return self.handleWebsocket(req, socket, body).then(function(result){
-                    return conn.handleMessage(result);
+                    return self.conn.handleMessage(result);
                   });
                 } else {
-                  self._handleUnauthorized(req, socket);
+                  self._handleUnauthorized();
                 }
               })
               .catch(Error.InvalidParams, function (err) { // Unauthorized
@@ -339,7 +339,7 @@ module.exports = function (classes) {
               });
 
             } else {
-              self._handleUnauthorized(req, res);
+              self._handleUnauthorized();
             }
           }).catch(Error.InvalidParams, function (err) {
             // not sure about this. comes from above where handleUnauthorized
@@ -389,7 +389,7 @@ module.exports = function (classes) {
                 // Try to notify client about failure to authenticate
                 if (Endpoint.hasId(decoded)) {
                   conn.sendReply('Error: Unauthorized', null, decoded.id);
-                  reject(new Error.InvalidParams(UNAUTHORIZED))
+                  return reject(new Error.InvalidParams(UNAUTHORIZED));
                 }
               } else {
                 // Handle 'auth' message
@@ -403,11 +403,11 @@ module.exports = function (classes) {
                     if (Endpoint.hasId(decoded)) {
                       conn.sendReply(null, true, decoded.id);
                     }
-                  }).catch(reject)
+                  }).catch(reject);
                 } else {
                   if (Endpoint.hasId(decoded)) {
                     conn.sendReply('Error: Invalid credentials', null, decoded.id);
-                    reject(new Error.InvalidParams(UNAUTHORIZED))
+                    return reject(new Error.InvalidParams(UNAUTHORIZED));
                   }
                 }
               }
@@ -446,7 +446,7 @@ module.exports = function (classes) {
               return;
             }
 
-            resolve(decoded);
+            return resolve(decoded);
           };
 
           socket.on('message', function (event) {
@@ -454,9 +454,10 @@ module.exports = function (classes) {
               parser.write(event.data);
             } catch (err) {
               // TODO: Is ignoring invalid data the right thing to do?
+              return reject(new Error.InvalidParams(err.message));  
             }
           });
-        })
+        });
 
       },
 
@@ -473,7 +474,7 @@ module.exports = function (classes) {
             self.handleRaw(socket).then(function(){
               // Re-emit first chunk
               socket.emit('data', chunk);
-            })
+            });
           }
         });
       },
