@@ -1,4 +1,4 @@
-'use strict';
+  'use strict';
 
 var
   expect = require('expect.js'),
@@ -74,14 +74,21 @@ module.exports = {
       testBadRequest = function (testJSON, done) {
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(null);
-        expect(decoded.error.message).to.equal('Invalid Request');
-        expect(decoded.error.code).to.equal(-32600);
-        done();
+        server.handleHttp(req, res).then(function (result) {
+          console.log(result);
+        }).catch(function (err) {
+          expect(err.id).to.equal(undefined);
+          expect(err.message).to.equal('Invalid Request');
+          expect(err.code).to.equal(-32600);
+          done();  
+        });
+
+        // to be executed right after handleHttp        
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');
+          clearTimeout(timeout);
+        });
       };
     },
     afterEach: function () {
@@ -101,36 +108,62 @@ module.exports = {
         expect(server.functions['test.foo']).to.eql(TestModule.foo);
       },
 
-      'GET Server handle NonPOST': function () {
+      'GET Server handle NonPOST': function (done) {
         var req = new MockRequest('GET');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(null);
-        expect(decoded.error.message).to.equal('Invalid Request');
-        expect(decoded.error.code).to.equal(-32600);
+        server.handleHttp(req, res).then(function () {
+        }).catch(function (err) {
+          expect(err.id).to.equal(undefined);
+          expect(err.message).to.equal('Invalid Request');
+          expect(err.code).to.equal(-32600);  
+          done();
+        });
+        
       },
-      'Method throw an error': function () {
+      
+      'Method throw an error': function (done) {
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', '{ "method": "throw_error", "params": [], "id": 1 }');
-        req.emit('end');
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(1);
-        expect(decoded.error.message).to.equal('InternalError');
-        expect(decoded.error.code).to.equal(-32603);
+        
+        server.handleHttp(req, res).then(function (result) {
+          var decoded = JSON.parse(result.httpBody); 
+          expect(decoded.id).to.equal(1);
+          expect(decoded.error.message).to.equal('InternalError');
+          expect(decoded.error.code).to.equal(-32603);
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
+
+        // adding this to the event loop
+        // executed immediately after server.handleHttp
+        var timeout = setTimeout(function () {
+          req.emit('data', '{ "method": "throw_error", "params": [], "id": 1 }');
+          req.emit('end');
+          clearTimeout(timeout);
+        }, 0);
+        
       },
-      'Method return an rpc error': function () {
+      
+      'Method return an rpc error': function (done) {
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', '{ "method": "json_rpc_error", "params": [], "id": 1 }');
-        req.emit('end');
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(1);
-        expect(decoded.error.message).to.equal('InternalError');
-        expect(decoded.error.code).to.equal(-32603);
+        server.handleHttp(req, res).then(function (result) {
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal(1);
+          expect(decoded.error.message).to.equal('InternalError');
+          expect(decoded.error.code).to.equal(-32603);  
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
+
+        var timeout = setTimeout(function () {
+          req.emit('data', '{ "method": "json_rpc_error", "params": [], "id": 1 }');
+          req.emit('end');  
+          clearTimeout(timeout);
+        });
+        
       },
 //      text_error javascript_error
       
@@ -138,74 +171,109 @@ module.exports = {
         var testJSON = '{ "params": ["Hello, World!"], "id": 1 }';
         testBadRequest(testJSON, done);
       },
-
+      
       'Missing object attribute (params)': function (done) {
         var testJSON = '{ "method": "echo", "id": 1 }';
         testBadRequest(testJSON, done);
       },
 
-      'Unregistered method': function () {
+
+      'Unregistered method': function (done) {
         var testJSON = '{ "method": "notRegistered", "params": ["Hello, World!"], "id": 1 }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        try {
-          server.handleHttp(req, res);
-        } catch (e) {
-        }
-        req.emit('data', testJSON);
-        req.emit('end');
-        expect(res.httpCode).to.equal(200);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(1);
-        expect(decoded.error.message).to.equal('Unknown RPC call "notRegistered"');
-        expect(decoded.error.code).to.equal(-32601);
-      },
+        server.handleHttp(req, res).then(function (result) {
+          expect(result.httpCode).to.equal(200);
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal(1);
+          expect(decoded.error.message).to.equal('Unknown RPC call "notRegistered"');
+          expect(decoded.error.code).to.equal(-32601);
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
 
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          clearTimeout(timeout);
+        }, 0);
+      },
+      
       // VALID REQUEST
 
-      'Simple synchronous echo': function () {
+      'Simple synchronous echo': function (done) {
         var testJSON = '{ "method": "echo", "params": ["Hello, World!"], "id": 1 }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        expect(res.httpCode).to.equal(200);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(1);
-        expect(decoded.error).to.equal(undefined);
-        expect(decoded.result).to.equal('Hello, World!');
-      },
+        server.handleHttp(req, res).then(function (result) {
+          expect(result.httpCode).to.equal(200);
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal(1);
+          expect(decoded.error).to.equal(undefined);
+          expect(decoded.result).to.equal('Hello, World!');
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
 
-      'Simple synchronous echo with id as null': function () {
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          clearTimeout(timeout);
+        }, 0);
+        
+      },
+      
+      'Simple synchronous echo with id as null': function (done) {
         var testJSON = '{ "method": "echo", "params": ["Hello, World!"], "id": null }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        expect(res.httpCode).to.equal(200);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(null);
-        expect(decoded.error).to.equal(undefined);
-        expect(decoded.result).to.equal('Hello, World!');
+
+        server.handleHttp(req, res).then(function (result) {
+          expect(result.httpCode).to.equal(200);
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal(null);
+          expect(decoded.error).to.equal(undefined);
+          expect(decoded.result).to.equal('Hello, World!');  
+          done();
+        }).catch(function (err){
+          return done(err);
+        });
+
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          clearTimeout(timeout);
+        }, 0);
+        
       },
 
-      'Simple synchronous echo with string as id': function () {
+      'Simple synchronous echo with string as id': function (done) {
         var testJSON = '{ "method": "echo", "params": ["Hello, World!"], "id": "test" }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        expect(res.httpCode).to.equal(200);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal('test');
-        expect(decoded.error).to.equal(undefined);
-        expect(decoded.result).to.equal('Hello, World!');
+
+        server.handleHttp(req, res).then(function (result){
+          expect(result.httpCode).to.equal(200);
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal('test');
+          expect(decoded.error).to.equal(undefined);
+          expect(decoded.result).to.equal('Hello, World!');
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
+
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          clearTimeout(timeout);
+        }, 0);
+        
       },
 
-      'Using promise': function () {
+      'Using promise': function (done) {
         // Expose a function that just returns a promise that we can control.
         var callbackRef = null;
         server.expose('promiseEcho', function (args, opts, callback) {
@@ -215,26 +283,36 @@ module.exports = {
         var testJSON = '{ "method": "promiseEcho", "params": ["Hello, World!"], "id": 1 }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
+
         // Have the server handle that request
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        // Now the request has completed, and in the above synchronous test, we
-        // would be finished. However, this function is smarter and only completes
-        // when the promise completes.  Therefore, we should not have a response
-        // yet.
-        expect(res.httpCode).to.not.be.ok();
-        // We can force the promise to emit a success code, with a message.
-        callbackRef(null, 'Hello, World!');
-        // Aha, now that the promise has finished, our request has finished as well.
-        expect(res.httpCode).to.equal(200);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(1);
-        expect(decoded.error).to.equal(undefined);
-        expect(decoded.result).to.equal('Hello, World!');
+        server.handleHttp(req, res).then(function (result) {
+          // Aha, now that the promise has finished, our request has finished as well.
+          expect(result.httpCode).to.equal(200);
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal(1);
+          expect(decoded.error).to.equal(undefined);
+          expect(decoded.result).to.equal('Hello, World!');
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
+
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          // Now the request has completed, and in the above synchronous test, we
+          // would be finished. However, this function is smarter and only completes
+          // when the promise completes.  Therefore, we should not have a response
+          // yet.
+          expect(res.httpCode).to.not.be.ok();
+          // We can force the promise to emit a success code, with a message.
+          callbackRef(null, 'Hello, World!');
+          clearTimeout(timeout);
+        }, 0);
+        
       },
 
-      'Triggering an errback': function () {
+      'Triggering an errback': function (done) {
         var callbackRef = null;
         server.expose('errbackEcho', function (args, opts, callback) {
           callbackRef = callback;
@@ -242,32 +320,51 @@ module.exports = {
         var testJSON = '{ "method": "errbackEcho", "params": ["Hello, World!"], "id": 1 }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        expect(res.httpCode).to.not.be.ok();
-        // This time, unlike the above test, we trigger an error and expect to see
-        // it in the error attribute of the object returned.
-        callbackRef('This is an error');
-        expect(res.httpCode).to.equal(200);
-        var decoded = JSON.parse(res.httpBody);
-        expect(decoded.id).to.equal(1);
-        expect(decoded.error.message).to.equal('This is an error');
-        expect(decoded.error.code).to.equal(-32603);
-        expect(decoded.result).to.equal(undefined);
+        server.handleHttp(req, res).then(function (result) {
+          expect(result.httpCode).to.equal(200);
+          var decoded = JSON.parse(result.httpBody);
+          expect(decoded.id).to.equal(1);
+          expect(decoded.error.message).to.equal('This is an error');
+          expect(decoded.error.code).to.equal(-32603);
+          expect(decoded.result).to.equal(undefined);
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
+
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          expect(res.httpCode).to.not.be.ok();
+          // This time, unlike the above test, we trigger an error and expect to see
+          // it in the error attribute of the object returned.
+          callbackRef('This is an error');
+          clearTimeout(timeout);
+        }, 0);
+        
       },
-      'Notification request': function () {
+      'Notification request': function (done) {
         var testJSON = '{ "method": "notify_test", "params": ["Hello, World!"] }';
         var req = new MockRequest('POST');
         var res = new MockResponse();
-        server.handleHttp(req, res);
-        req.emit('data', testJSON);
-        req.emit('end');
-        // although it shouldn't return a response, we are dealing with HTTP, that MUST
-        // return something, in most cases, 0 length body
-        expect(res.httpCode).to.equal(200);
-        expect(res.httpBody).to.equal('');
-      }
+        server.handleHttp(req, res).then(function (result) {
+          // although it shouldn't return a response, we are dealing with HTTP, that MUST
+          // return something, in most cases, 0 length body
+          expect(result.httpCode).to.equal(200);
+          expect(result.httpBody).to.equal('');
+          done();
+        }).catch(function (err) {
+          return done(err);
+        });
+
+        var timeout = setTimeout(function () {
+          req.emit('data', testJSON);
+          req.emit('end');  
+          clearTimeout(timeout);
+        }, 0);
+        
+      } 
     }
+
   }
 };

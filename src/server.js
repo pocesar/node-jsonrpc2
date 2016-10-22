@@ -39,7 +39,6 @@ module.exports = function (classes) {
 
         // Authorization
         this.authType = Authorization.NONE;
-        this.authHandler = null;
         this.basicHandler = null;
         this.jwtHandler = null;
         this.cookieHandler = null;
@@ -79,7 +78,7 @@ module.exports = function (classes) {
       _checkAuth: function (req) {
         var self = this;
 
-        if (self.authHandler) {
+        if (self.authType !== Authorization.NONE) {
           var
             authHeader = self._getAuthHeader(req), // get the header
             authToken = self._getAuthValue(authHeader); // get the token
@@ -94,7 +93,7 @@ module.exports = function (classes) {
 
               // i think it introduces some performance degradation due to double promisification.
               // i also think it might be negligible
-              return self.authHandler(username, password, function callback(err, result) {
+              return self.basicHandler(username, password, function callback(err, result) {
                 if (err) {
                   return Promise.reject(err);
                 }
@@ -102,8 +101,14 @@ module.exports = function (classes) {
               });
 
             case Authorization.COOKIE:
+              return self.cookieHandler(authToken, function callback(err, result) {
+                if (err) {
+                  return Promise.reject(err);
+                }
+                return Promise.resolve(result);
+              });
             case Authorization.JWT:
-              return self.authHandler(authToken, function callback(err, result) {
+              return self.jwtHandler(authToken, function callback(err, result) {
                 if (err) {
                   return Promise.reject(err);
                 }
@@ -115,7 +120,7 @@ module.exports = function (classes) {
           return Promise.resolve(true);
         }
       },
-      _handleUnauthorized: function (req, res) {
+      _handleUnauthorized: function () {
         classes.EventEmitter.trace('<--', 'Unauthorized request');
         throw new Error.InvalidParams(UNAUTHORIZED);
       },
@@ -127,16 +132,11 @@ module.exports = function (classes) {
         var server = http.createServer();
 
         server.on('request', function onRequest(req, res) {
-          self.handleHttp(req, res)
-          .then(function(){
-          })
-          .catch(Error.ParseError, function(err){
-            Server.handleHttpError(req, res, err, self.opts.headers);
-          })
-          .catch(Error.InvalidRequest, function(err){
-            Server.handleHttpError(req, res, err, self.opts.headers);
-          })
-          ;
+          self.handleHttp(req, res).then(function () {
+          }).catch(function (err) {
+            Server.handleHttpError(req, res, err, self.opts.headers);            
+          });
+          
         });
 
         if (port) {
@@ -151,13 +151,13 @@ module.exports = function (classes) {
               self._checkAuth(req, socket).then(function (result) {
                 if (result) {
                   return self.handleWebsocket(req, socket, body).then(function(result){
-                    return conn.handleMessage(result);
+                    return self.conn.handleMessage(result);
                   });
                 } else {
-                  self._handleUnauthorized(req, socket);
+                  self._handleUnauthorized();
                 }
               })
-              .catch(Error.InvalidParams, function (err) {
+              .catch(Error.InvalidParams, function (err) { // Unauthorized
                 Server.handleHttpError(req, socket, err, self.opts.headers);
               })
               .catch(function (err) {
@@ -213,7 +213,7 @@ module.exports = function (classes) {
       handleHttp: function (req, res, callback) {
         var self = this;
 
-        return new Promise(function(resolve, reject){
+        return new Promise(function (resolve, reject) {
 
           var buffer = '';
           var headers;
@@ -226,7 +226,7 @@ module.exports = function (classes) {
             headers = extend({}, headers, self.opts.headers);
             res.writeHead(200, headers);
             res.end();
-            return resolve();
+            return resolve(res);
           }
 
           if (req.method !== 'POST') {
@@ -270,6 +270,7 @@ module.exports = function (classes) {
                 res.writeHead(200, headers);
                 res.write(encoded);
                 res.end();
+                return resolve(res);
               } else {
                 res.writeHead(200, headers);
                 res.write(encoded);
@@ -281,7 +282,6 @@ module.exports = function (classes) {
               var response;
 
               if (err) {
-
                 self.emit('error', err);
 
                 Endpoint.trace('-->', 'Failure (id ' + decoded.id + '): ' +
@@ -319,7 +319,11 @@ module.exports = function (classes) {
 
             var conn = new classes.HttpServerConnection(self, req, res);
 
-            self.handleCall(decoded, conn, callback);
+            self.handleCall(decoded, conn, callback).then(function (result) {
+              return resolve(result);
+            }).catch(function (err) {
+              return reject(err);
+            });
           }; // function handle(buf)
 
           self._checkAuth(req, res).then(function (result) {
@@ -335,12 +339,22 @@ module.exports = function (classes) {
               });
 
             } else {
-              self._handleUnauthorized(req, res);
+              self._handleUnauthorized();
             }
+          }).catch(Error.InvalidParams, function (err) {
+            // not sure about this. comes from above where handleUnauthorized
+            // throws InvalidParams. To be discussed the Error types in this
+            // case when the value is not provided for the set authType.
+            // changing the authrization tests InternalError expectancy 
+            // or handling on message value.
+            if (err.message === UNAUTHORIZED) {
+              return reject(new Error.InvalidParams(err.message));
+            }
+            return reject(new Error.InternalError(err.message));
           }).catch(function (err) {
             // handle Internal Server Error from Check authorization
             classes.EventEmitter.trace('<--', 'Internal Server Error');
-            reject(new Error.InternalError(err.message));
+            return reject(new Error.InternalError(err.message));
           });
         }).nodeify(callback).bind(this);
       },
@@ -375,7 +389,7 @@ module.exports = function (classes) {
                 // Try to notify client about failure to authenticate
                 if (Endpoint.hasId(decoded)) {
                   conn.sendReply('Error: Unauthorized', null, decoded.id);
-                  reject(new Error.InvalidParams(UNAUTHORIZED))
+                  return reject(new Error.InvalidParams(UNAUTHORIZED));
                 }
               } else {
                 // Handle 'auth' message
@@ -389,11 +403,11 @@ module.exports = function (classes) {
                     if (Endpoint.hasId(decoded)) {
                       conn.sendReply(null, true, decoded.id);
                     }
-                  }).catch(reject)
+                  }).catch(reject);
                 } else {
                   if (Endpoint.hasId(decoded)) {
                     conn.sendReply('Error: Invalid credentials', null, decoded.id);
-                    reject(new Error.InvalidParams(UNAUTHORIZED))
+                    return reject(new Error.InvalidParams(UNAUTHORIZED));
                   }
                 }
               }
@@ -432,7 +446,7 @@ module.exports = function (classes) {
               return;
             }
 
-            resolve(decoded);
+            return resolve(decoded);
           };
 
           socket.on('message', function (event) {
@@ -440,9 +454,10 @@ module.exports = function (classes) {
               parser.write(event.data);
             } catch (err) {
               // TODO: Is ignoring invalid data the right thing to do?
+              return reject(new Error.InvalidParams(err.message));  
             }
           });
-        })
+        });
 
       },
 
@@ -459,7 +474,7 @@ module.exports = function (classes) {
             self.handleRaw(socket).then(function(){
               // Re-emit first chunk
               socket.emit('data', chunk);
-            })
+            });
           }
         });
       },
@@ -486,8 +501,7 @@ module.exports = function (classes) {
         }
 
         this.authType = Authorization.BASIC;
-        this.basicHandler = handler;
-        this.authHandler = Promise.method(this.basicHandler);
+        this.basicHandler = Promise.method(handler);
 
         return this;
       },
@@ -515,8 +529,7 @@ module.exports = function (classes) {
       enableCookieAuth: function (handler) {
         if (_.isFunction(handler)) {
           this.authType = Authorization.COOKIE;
-          this.cookieHandler = handler;
-          this.authHandler = Promise.method(this.cookieHandler);
+          this.cookieHandler = Promise.method(handler);
         }
 
         return this;
@@ -533,8 +546,7 @@ module.exports = function (classes) {
       enableJWTAuth: function (handler) {
         if (_.isFunction(handler)) {
           this.authType = Authorization.JWT;
-          this.jwtHandler = handler;
-          this.authHandler = Promise.method(this.jwtHandler);
+          this.jwtHandler = Promise.method(handler);
         }
 
         return this;
@@ -551,23 +563,6 @@ module.exports = function (classes) {
         type = type.toLowerCase();
         if (type && (_.values(Authorization).indexOf(type) > -1)) {
           this.authType = type;
-          switch (this.authType) {
-            case Authorization.BASIC:
-              this.authHandler = Promise.method(this.basicHandler);
-            break;
-
-            case Authorization.COOKIE:
-              this.authHandler = Promise.method(this.cookieHandler);
-            break;
-
-            case Authorization.JWT:
-              this.authHandler = Promise.method(this.jwtHandler);
-            break;
-
-            default:
-              this.authHandler = null;
-            break;
-          }
         }
 
         return this;

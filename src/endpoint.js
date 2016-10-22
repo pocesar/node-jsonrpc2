@@ -53,31 +53,32 @@ module.exports = function (classes){
         }
         return func;
       },
-      handleCall: function (decoded, conn, callback){
-        return new Promise(function(resolve, reject){
+      handleCall: function (decoded, conn, callback) {
+        var self = this;
+        
+        return new Promise(function (resolve, reject) {
           EventEmitter.trace('<--', 'Request (id ' + decoded.id + '): ' +
             decoded.method + '(' + JSON.stringify(decoded.params) + ')');
 
-          if (!this.functions.hasOwnProperty(decoded.method)) {
-            reject(new Error.MethodNotFound('Unknown RPC call "' + decoded.method + '"'));
-            return;
+          if (!self.functions.hasOwnProperty(decoded.method)) {
+            return reject(new Error.MethodNotFound('Unknown RPC call "' + decoded.method + '"'));
           }
 
-          var method = this.functions[decoded.method];
-          var scope = this.scopes[decoded.method] || this.defaultScope;
+          var method = self.functions[decoded.method];
+          var scope = self.scopes[decoded.method] || self.defaultScope;
 
           // Try to call the method, but intercept errors and call our
           // error handler.
           try {
-            resolve(method.call(scope, decoded.params, conn, function(err, result){
-              if (err){
-                return Promise.reject(err);
+            method.call(scope, decoded.params, conn, function (err, result) {
+              if (err) {
+                return reject(err);
               }
 
-              return Promise.resolve(result);
-            }));
+              return resolve(result);
+            });
           } catch (err) {
-            reject(err);
+            return reject(err);
           }
         }).nodeify(callback).bind(this);
       }
