@@ -40,7 +40,7 @@ module.exports = function (classes){
           params : params,
           id     : id
         });
-        this.write(data);
+        this.write(data + '\n');
       },
 
       /**
