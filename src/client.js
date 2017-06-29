@@ -50,8 +50,7 @@ module.exports = function (classes){
         var req;
 
         if (calls && calls instanceof Array) {
-            req = [];
-            // Loop through the shortest array, for multiple calls
+          req = [];
           for (var c = 0; c < calls.length; c++){
             var call = calls[c] || {};
             EventEmitter.trace('-->', 'Http call (method ' + call.method + '): ' + JSON.stringify(call.params));
@@ -308,6 +307,10 @@ module.exports = function (classes){
                                 }
                                 return_error.push(decoded[d].error)
                             }
+                        }
+                        if (decoded.length === 1){
+                            // If singular call, unpack from array
+                            decoded = decoded[0];
                         }
                         callback(return_error, decoded);
                     } else {
