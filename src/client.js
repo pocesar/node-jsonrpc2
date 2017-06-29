@@ -36,22 +36,30 @@ module.exports = function (classes){
        * In HTTP mode, we get to submit exactly one message and receive up to n
        * messages.
        */
-      connectHttp  : function (method, params, opts, callback){
+      connectHttp  : function (calls, opts, callback){
         if (_.isFunction(opts)) {
           callback = opts;
           opts = {};
         }
         opts = opts || {};
+        calls = calls || [];
 
         var id = 1, self = this;
 
         // First we encode the request into JSON
-        var requestJSON = JSON.stringify({
-          'id'     : id,
-          'method' : method,
-          'params' : params,
-          'jsonrpc': '2.0'
-        });
+        var req;
+
+        if (calls && calls instanceof Array) {
+            req = [];
+            // Loop through the shortest array, for multiple calls
+          for (var c = 0; c < calls.length; c++){
+            var call = calls[c] || {};
+            EventEmitter.trace('-->', 'Http call (method ' + call.method + '): ' + JSON.stringify(call.params));
+            req.push({'id': id, 'method' : call.method, 'params' : call.params, 'jsonrpc': '2.0'})
+          }
+        }
+        
+        var requestJSON = JSON.stringify(req);
 
         var headers = {};
 
@@ -69,6 +77,9 @@ module.exports = function (classes){
           method  : 'POST',
           headers : headers
         };
+        if (opts.agent){
+            options.agent = opts.agent;
+        }
         var request;
         if(opts.https === true) {
           if(opts.rejectUnauthorized !== undefined) {
@@ -255,37 +266,58 @@ module.exports = function (classes){
           opts = {};
         }
         opts = opts || {};
-        EventEmitter.trace('-->', 'Http call (method ' + method + '): ' + JSON.stringify(params));
-
-        this.connectHttp(method, params, opts, function connectHttp(id, request, response){
-          // Check if response object exists.
-          if (!response) {
-            callback(new Error('Have no response object'));
-            return;
+        this.call_multi([{method: method, params: params}, opts, callback]);
+      },
+      call_multi         : function (calls, opts, callback){
+          // Calls object to be array of object in format [{"method": "method1", "params": ["params1"]}]
+          if (_.isFunction(opts)) {
+              callback = opts;
+              opts = {};
           }
-
-          var data = '';
-
-          response.on('data', function responseData(chunk){
-            data += chunk;
-          });
-
-          response.on('end', function responseEnd(){
-            if (response.statusCode !== 200) {
-              callback(new Error('"' + response.statusCode + '"' + data))
-              ;
+          opts = opts || {};
+          calls = calls || [];
+          this.connectHttp(calls, opts, function connectHttp(id, request, response){
+            // Check if response object exists.
+            if (!response) {
+              callback(new Error('Have no response object'));
               return;
             }
-            var decoded = JSON.parse(data);
-            if (_.isFunction(callback)) {
-              if (!decoded.error) {
-                decoded.error = null;
-              }
-              callback(decoded.error, decoded.result);
-            }
+
+            var data = '';
+
+            response.on('data', function responseData(chunk){
+                data += chunk;
+            });
+
+            response.on('end', function responseEnd(){
+                if (response.statusCode !== 200) {
+                    callback(new Error('"' + response.statusCode + '"' + data))
+                    ;
+                    return;
+                }
+                var decoded = JSON.parse(data);
+                if (_.isFunction(callback)) {
+                    var return_error = null;
+                    if (decoded instanceof Array && decoded.length) {
+                        for (var d in decoded){
+                            if (decoded[d] && !decoded[d].error){
+                                decoded[d].error = null;
+                            } else {
+                                if(!return_error){
+                                    return_error = [];
+                                }
+                                return_error.push(decoded[d].error)
+                            }
+                        }
+                        callback(return_error, decoded);
+                    } else {
+                        callback(new Error('Have no response object'));
+                        return;
+                    }
+                }
+            });
           });
-        });
-      }
+        }
     });
 
   return Client;
