@@ -266,7 +266,7 @@ module.exports = function (classes){
           opts = {};
         }
         opts = opts || {};
-        this.call_multi([{method: method, params: params}, opts, callback]);
+        this.call_multi([{method: method, params: params}], opts, callback);
       },
       call_multi         : function (calls, opts, callback){
           // Calls object to be array of object in format [{"method": "method1", "params": ["params1"]}]
