@@ -54,7 +54,7 @@ module.exports = function (classes){
           for (var c = 0; c < calls.length; c++){
             var call = calls[c] || {};
             EventEmitter.trace('-->', 'Http call (method ' + call.method + '): ' + JSON.stringify(call.params));
-            req.push({'id': id, 'method' : call.method, 'params' : call.params, 'jsonrpc': '2.0'})
+            req.push({'id': id, 'method' : call.method, 'params' : call.params, 'jsonrpc': '2.0'});
           }
         }
         
@@ -305,7 +305,7 @@ module.exports = function (classes){
                                 if(!return_error){
                                     return_error = [];
                                 }
-                                return_error.push(decoded[d].error)
+                                return_error.push(decoded[d].error);
                             }
                         }
                         if (decoded.length === 1){
