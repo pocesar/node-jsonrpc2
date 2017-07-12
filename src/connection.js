@@ -101,7 +101,9 @@ module.exports = function (classes){
               }
 
               if (err) {
-                err = err.toString();
+                //err = err.toString();
+                //by specification need object with fields 'message' and code
+                err = err.getObject();
                 result = null;
               } else {
                 EventEmitter.trace('-->', 'Response (id ' + msg.id + '): ' +
