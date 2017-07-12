@@ -115,15 +115,16 @@ module.exports = function (classes){
         }
       },
 
-      sendReply: function (err, result, id){
-        var data = JSON.stringify({
-          jsonrpc: '2.0',
-          result : result,
-          error  : err,
-          id     : id
-        });
-
-        this.write(data);
+      sendReply: function (error, result, id){
+        const jsonrpc = '2.0'
+        let data = { result, error, id, jsonrpc };
+        for (let key of Object.keys(data)){
+          if (_.isNull(data[key])){
+            delete data[key];
+          }
+        }
+        let send = JSON.stringify(data);
+        this.write(send);
       }
     });
 
