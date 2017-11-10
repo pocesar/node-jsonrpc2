@@ -272,11 +272,20 @@ module.exports = function (classes){
 
           response.on('end', function responseEnd(){
             if (response.statusCode !== 200) {
-              callback(new Error('"' + response.statusCode + '"' + data))
-              ;
+              callback(new Error('"' + response.statusCode + '"' + data));
               return;
             }
-            var decoded = JSON.parse(data);
+
+            var decoded;
+            try {
+              decoded = JSON.parse(data);
+            } catch (error) {
+              decoded = {
+                error: error,
+                result: null
+              };
+            }
+
             if (_.isFunction(callback)) {
               if (!decoded.error) {
                 decoded.error = null;
