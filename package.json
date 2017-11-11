@@ -1,8 +1,8 @@
 {
   "name": "json-rpc2",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "JSON-RPC 2.0 server and client library, with HTTP, TCP and Websocket endpoints",
-  "main": "./src/jsonrpc.js",
+  "main": "./lib/index.js",
   "keywords": [
     "json",
     "rpc",
@@ -20,23 +20,18 @@
   "license": "MIT",
   "author": {
       "name": "Eric Florenzano",
-      "url": "eflorenzano.com"
+      "url": "http://eflorenzano.com"
   },
   "maintainers": [{
       "name": "Paulo Cesar",
       "url": "https://github.com/pocesar"
   }],
   "dependencies": {
-    "jsonparse": "1.x.x",
-    "debug": "2.x.x",
-    "lodash": "3.x.x",
-    "es5class": "2.x.x",
-    "faye-websocket": "0.x.x",
-    "eventemitter3": "1.x.x",
-    "object-assign": "4.x"
-  },
-  "engines": {
-    "node": "0.10.x || 0.12.x"
+    "jsonparse": "^1.3.1",
+    "debug": "^3.1.0",
+    "lodash": "^4.17.4",
+    "faye-websocket": "^0.11.1",
+    "eventemitter3": "^2.0.3"
   },
   "contributors": [
     "Bill Casarin <bill@casarin.ca> (jb55.com)",
@@ -51,13 +46,22 @@
     "url": "https://github.com/pocesar/node-jsonrpc2/issues"
   },
   "devDependencies": {
-    "mocha": "2.x.x",
-    "expect.js": "0.x.x",
-    "jshint": "2.x.x",
-    "istanbul": "0.x.x"
+    "@types/mocha": "^2.2.43",
+    "@types/expect.js": "^0.3.29",
+    "@types/debug": "^0.0.30",
+    "@types/node": "^8.0.47",
+    "@types/lodash": "^4.14.80",
+    "@types/sinon": "^2.3.7",
+    "typescript": "^2.5.3",
+    "mocha": "^4.0.1",
+    "coveralls": "^3.0.0",
+    "sinon": "^4.0.2",
+    "expect.js": "^0.3.1",
+    "istanbul": "^0.4.5"
   },
   "scripts": {
-    "test": "jshint examples src test && mocha test/*.js",
-    "coverage": "node ./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- -t 5000 test/jsonrpc-test.js"
+    "test": "mocha test/jsonrpc-test.js",
+    "coverage": "node ./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- -t 5000 test/jsonrpc-test.js",
+    "coveralls": "node ./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- --report lcovonly test/jsonrpc-test.js && cat ./coverage/lcov.info | node ./node_modules/coveralls/bin/coveralls.js"
   }
 }

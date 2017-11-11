@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "es2016",
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "module": "commonjs",
+    "rootDir": "src",
+    "declaration": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "sourceMap": true,
+    "moduleResolution": "node",
+    "removeComments": false,
+    "listEmittedFiles": true,
+    "outDir": "lib"
+  },
+  "files": [
+    "generic.d.ts",
+    "src/index.ts"
+  ]
+}

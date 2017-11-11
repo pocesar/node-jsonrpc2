@@ -1,3 +1,10 @@
 .idea
 node_modules
 coverage
+src
+test
+.travis.yml
+jsconfig.json
+README.md
+examples
+tsconfig.json
