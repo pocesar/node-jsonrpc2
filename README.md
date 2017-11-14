@@ -1,6 +1,8 @@
 [![Build Status](https://travis-ci.org/pocesar/node-jsonrpc2.svg?branch=master)](https://travis-ci.org/pocesar/node-jsonrpc2)
 [![Coverage Status](https://coveralls.io/repos/github/pocesar/node-jsonrpc2/badge.svg?branch=master)](https://coveralls.io/github/pocesar/node-jsonrpc2?branch=master)
 [![Dependency Status](https://gemnasium.com/pocesar/node-jsonrpc2.svg)](https://gemnasium.com/pocesar/node-jsonrpc2)
+[![Known Vulnerabilities](https://snyk.io/test/github/pocesar/node-jsonrpc2/badge.svg)](https://snyk.io/test/github/pocesar/node-jsonrpc2)
+
 
 [![NPM](https://nodei.co/npm/json-rpc2.svg?downloads=true)](https://nodei.co/npm/json-rpc2/)
 

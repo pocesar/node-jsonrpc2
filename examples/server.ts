@@ -1,4 +1,4 @@
-var rpc = require('../src/jsonrpc');
+import * as rpc from '../lib';
 
 var server = rpc.Server.$create({
   websocket: true
@@ -52,9 +52,7 @@ server.exposeModule('delayed', {
 );
 
 // or server.enableAuth('myuser', 'secret123');
-server.enableAuth(function(user, password){
-  return user === 'myuser' && password === 'secret123';
-});
+server.addAuth(new rpc.Auth.UserPass('myuser', 'secret123'));
 
 /* HTTP/Websocket server on port 8088 */
 server.listen(8088, 'localhost');

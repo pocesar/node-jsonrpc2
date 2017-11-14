@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".",
+    "listEmittedFiles": false
+  },
+  "files": [
+    "examples/client.ts",
+    "examples/server.ts",
+    "examples/stream-client.ts",
+    "examples/stream-server.ts"
+  ]
+}

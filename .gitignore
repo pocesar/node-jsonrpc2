@@ -2,3 +2,9 @@ node_modules
 .idea
 coverage
 lib
+examples/*.js
+examples/*.d.js
+examples/*.map
+test/*.d.ts
+test/*.js
+test/*.map

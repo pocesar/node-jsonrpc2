@@ -18,6 +18,9 @@ export default class Endpoint extends EventEmitter {
     this.scopes = Object.create(null);
   }
 
+  namespace(name: string, functions: { [index: string]: RPCCallback<any> }) {
+  }
+
   /**
    * Define a callable method on this RPC endpoint
    */

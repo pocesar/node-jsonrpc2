@@ -1,49 +1,47 @@
-export type AuthMethods = 'http' | 'websocket' | 'socket';
+import { Request } from './event-emitter'
+
+export interface AuthProvider {
+  headers: Object;
+  user: string;
+  pass: string;
+}
+
+export interface AuthCheck {
+
+}
 
 export interface AuthClass {
-  get(method: AuthMethods): Promise<string | any[]>;
-  check(method: AuthMethods, checker: () => {}): Promise<boolean>;
+  client(): Promise<AuthProvider>
+  server(incoming: AuthCheck): Promise<boolean>
 }
 
 export class Auth implements AuthClass {
-  async get(method: AuthMethods): Promise<string | any[]> {
+  async client(): Promise<AuthProvider> {
     throw new Error('missing "get" overload')
   }
 
-  async check(method: AuthMethods): Promise<boolean> {
+  async server(incoming: AuthCheck): Promise<boolean> {
     throw new Error('missing "check" overload')
   }
 }
 
-export class UserPass extends Auth {
+export class UserPass extends Auth implements Auth {
   constructor(private user: string, private password: string) {
     super()
   }
 
-  async get(method: AuthMethods) {
-    switch (method) {
-      case 'websocket':
-      case 'http':
-        return new Buffer(this.user + ':' + this.password).toString('base64');
-      case 'socket':
-
-        break
+  async client() {
+    return {
+      headers: {
+        'Authorization': `Basic ${new Buffer(this.user + ':' + this.password).toString('base64')}`
+      },
+      user: this.user,
+      pass: this.password
     }
-
-    return null
   }
 
-  async check(method: AuthMethods) {
-    switch (method) {
-      case 'http':
-      case 'websocket':
-        break
-      case 'socket':
-
-        break
-      default:
-        return false
-    }
+  async server(incoming: AuthCheck) {
+    return false
   }
 }
 
