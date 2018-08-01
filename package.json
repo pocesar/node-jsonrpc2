@@ -19,19 +19,21 @@
   ],
   "license": "MIT",
   "author": {
-      "name": "Eric Florenzano",
-      "url": "eflorenzano.com"
+    "name": "Eric Florenzano",
+    "url": "eflorenzano.com"
   },
-  "maintainers": [{
+  "maintainers": [
+    {
       "name": "Paulo Cesar",
       "url": "https://github.com/pocesar"
-  }],
+    }
+  ],
   "dependencies": {
     "jsonparse": "1.x.x",
     "debug": "2.x.x",
-    "lodash": "3.x.x",
+    "lodash": "~4.17.10",
     "es5class": "2.x.x",
-    "faye-websocket": "0.x.x",
+    "faye-websocket": "~0.11.1",
     "eventemitter3": "1.x.x",
     "object-assign": "4.x"
   },
@@ -51,10 +53,10 @@
     "url": "https://github.com/pocesar/node-jsonrpc2/issues"
   },
   "devDependencies": {
-    "mocha": "2.x.x",
     "expect.js": "0.x.x",
+    "istanbul": "0.x.x",
     "jshint": "2.x.x",
-    "istanbul": "0.x.x"
+    "mocha": "~5.2.0"
   },
   "scripts": {
     "test": "jshint examples src test && mocha test/*.js",
