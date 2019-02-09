@@ -29,7 +29,7 @@
   "dependencies": {
     "jsonparse": "1.x.x",
     "debug": "2.x.x",
-    "lodash": "3.x.x",
+    "lodash": "4.17.11",
     "es5class": "2.x.x",
     "faye-websocket": "0.x.x",
     "eventemitter3": "1.x.x",
