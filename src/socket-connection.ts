@@ -1,35 +1,36 @@
-import Connection from "./connection";
-import Endpoint from './endpoint'
+import { Connection } from "./connection"
+import { Endpoint } from './endpoint'
 import { Socket } from 'net'
-import Client from './client'
+import { Client } from './client'
+import * as Errors from './errors'
 
 /**
-     * Socket connection.
-     *
-     * Socket connections are mostly symmetric, so we are using a single class for
-     * representing both the server and client perspective.
-     */
-export default class SocketConnection extends Connection {
+ * Socket connection.
+ *
+ * Socket connections are mostly symmetric, so we are using a single class for
+ * representing both the server and client perspective.
+ */
+export class SocketConnection extends Connection {
   autoReconnect: boolean = true
   ended: boolean = true
 
-  constructor(endpoint: Endpoint, protected conn: Socket) {
+  constructor(endpoint: Endpoint, protected socket: Socket) {
     super(endpoint)
 
-    this.conn.on("connect", () => {
-      this.emit("connect");
-    });
+    this.socket.on("connect", () => {
+      this.emit("connect")
+    })
 
-    this.conn.on("end", () => {
-      this.emit("end");
-    });
+    this.socket.on("end", () => {
+      this.emit("end")
+    })
 
-    this.conn.on("error", (event) => {
-      this.emit("error", event instanceof Error ? event : new Error(event));
-    });
+    this.socket.on("error", (event) => {
+      this.emit("error", Errors.wrapError(event, Errors.InternalError))
+    })
 
-    this.conn.on("close", (hadError) => {
-      this.emit("close", hadError);
+    this.socket.on("close", (hadError) => {
+      this.emit("close", hadError)
 
       if (
         this.endpoint instanceof Client &&
@@ -39,36 +40,36 @@ export default class SocketConnection extends Connection {
         if (hadError) {
           // If there was an error, we'll wait a moment before retrying
           setTimeout(() => {
-            this.reconnect();
-          }, 200);
+            this.reconnect()
+          }, 200)
         } else {
-          this.reconnect();
+          this.reconnect()
         }
       }
-    });
+    })
   }
 
   write(data: any) {
-    if (!this.conn.writable) {
+    if (!this.socket.writable) {
       // Other side disconnected, we'll quietly fail
-      return;
+      return
     }
 
-    this.conn.write(data);
+    this.socket.write(data)
   }
 
   end() {
-    this.ended = true;
-    this.conn.end();
+    this.ended = true
+    this.socket.end()
   }
 
   reconnect() {
-    this.ended = false;
+    this.ended = false
 
     if (this.endpoint instanceof Client) {
-      this.conn.connect(this.endpoint.port, this.endpoint.host);
+      this.socket.connect(this.endpoint.port, this.endpoint.host)
     } else {
-      throw new Error("Cannot reconnect a connection from the server-side.");
+      throw new Error("Cannot reconnect a connection from the server-side.")
     }
   }
 }

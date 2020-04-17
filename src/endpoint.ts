@@ -1,4 +1,4 @@
-import EventEmitter, { RPCCallback } from "./event-emitter";
+import { EventEmitter, RPCCallback } from "./event-emitter";
 import * as _ from "lodash";
 import * as Errors from "./errors";
 
@@ -7,7 +7,7 @@ import * as Errors from "./errors";
  *
  * Has the ability to register RPC events and expose RPC methods.
  */
-export default class Endpoint extends EventEmitter {
+export class Endpoint extends EventEmitter {
   functions: {}
   scopes: {}
 

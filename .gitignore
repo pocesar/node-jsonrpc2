@@ -3,7 +3,7 @@ node_modules
 coverage
 lib
 examples/*.js
-examples/*.d.js
+examples/*.d.ts
 examples/*.map
 test/*.d.ts
 test/*.js

@@ -3,7 +3,6 @@ node_js:
   - "9"
   - "8"
   - "6"
-  - "4"
 before_script:
   - node node_modules/typescript/bin/tsc -p tsconfig.json
 after_success:

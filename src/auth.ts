@@ -1,4 +1,5 @@
-import { Request } from './event-emitter'
+import { RpcRequest } from './event-emitter'
+import * as Errors from './errors'
 
 export interface AuthProvider {
   headers: Object;
@@ -17,11 +18,11 @@ export interface AuthClass {
 
 export class Auth implements AuthClass {
   async client(): Promise<AuthProvider> {
-    throw new Error('missing "get" overload')
+    throw new Errors.RpcError('missing "get" overload')
   }
 
   async server(incoming: AuthCheck): Promise<boolean> {
-    throw new Error('missing "check" overload')
+    throw new Errors.RpcError('missing "check" overload')
   }
 }
 
@@ -46,9 +47,29 @@ export class UserPass extends Auth implements Auth {
 }
 
 export class Cookie extends Auth {
+  constructor(private token: string) {
+    super()
+  }
 
+  async client() {
+    return {
+      headers: {
+        'Authorization': `Bearer  ${new Buffer(this.token).toString('base64')}`
+      },
+    }
+  }
 }
 
 export class JWT extends Auth {
+  constructor(private token: string) {
+    super()
+  }
 
+  async client() {
+    return {
+      headers: {
+        'Authorization': `Bearer  ${new Buffer(this.token).toString('base64')}`
+      },
+    }
+  }
 }

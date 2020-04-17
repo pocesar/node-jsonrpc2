@@ -2,8 +2,8 @@ import * as net from "net";
 import * as http from "http";
 import JsonParser = require("jsonparse");
 import * as _ from "lodash";
-import Endpoint from "./endpoint";
-import WebSocket from "./websocket-connection";
+import { Endpoint } from "./endpoint";
+import { WebSocketConnection } from "./websocket-connection";
 import * as Errors from "./errors";
 
 export const UNAUTHORIZED = "Unauthorized";
@@ -13,7 +13,7 @@ export const INVALID_REQUEST = "Invalid request";
 /**
    * JSON-RPC Server.
    */
-export default class Server extends Endpoint {
+export class Server extends Endpoint {
   constructor(opts) {
     super();
 

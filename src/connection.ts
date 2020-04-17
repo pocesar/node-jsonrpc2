@@ -1,13 +1,13 @@
-import EventEmitter, { RPCCallback, RPCId, Request } from "./event-emitter";
+import { EventEmitter, RPCCallback, RPCId, Request } from "./event-emitter";
 import * as _ from "lodash";
-import Endpoint from "./endpoint";
+import { Endpoint } from "./endpoint";
 
 export type Callbacks = {
   [index: string]: RPCCallback
   [index: number]: RPCCallback
 }
 
-export default class Connection extends EventEmitter {
+export class Connection extends EventEmitter {
   callbacks: Callbacks;
   latestId: RPCId;
 

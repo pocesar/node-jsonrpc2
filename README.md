@@ -1,10 +1,10 @@
 [![Build Status](https://travis-ci.org/pocesar/node-jsonrpc2.svg?branch=master)](https://travis-ci.org/pocesar/node-jsonrpc2)
 [![Coverage Status](https://coveralls.io/repos/github/pocesar/node-jsonrpc2/badge.svg?branch=master)](https://coveralls.io/github/pocesar/node-jsonrpc2?branch=master)
-[![Dependency Status](https://gemnasium.com/pocesar/node-jsonrpc2.svg)](https://gemnasium.com/pocesar/node-jsonrpc2)
+[![Dependency Status](https://gemnasium.com/badges/github.com/pocesar/node-jsonrpc2.svg)](https://gemnasium.com/github.com/pocesar/node-jsonrpc2)
 [![Known Vulnerabilities](https://snyk.io/test/github/pocesar/node-jsonrpc2/badge.svg)](https://snyk.io/test/github/pocesar/node-jsonrpc2)
 
 
-[![NPM](https://nodei.co/npm/json-rpc2.svg?downloads=true)](https://nodei.co/npm/json-rpc2/)
+[![NPM](https://nodei.co/npm/json-rpc2.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/json-rpc2/)
 
 # node-jsonrpc2
 
@@ -43,7 +43,7 @@ server.expose('namespace', {
     function2: function(){},
     function3: function(){}
 });
-// expects calls to be namespace.function1, namespace.function2 and namespace.function3
+// expects calls to be 'namespace.function1', 'namespace.function2' and 'namespace.function3'
 
 // listen creates an HTTP server on localhost only
 server.listen(8000, 'localhost');
@@ -77,11 +77,34 @@ server.setAuth(new Auth.UserPass('user', 'pass'));
 server.listenRaw(8080, 'localhost');
 ```
 
+## API
+
+Each of the members below are exported by `json-rpc2` index, and should be imported using `import { Something } from 'json-rpc2'`
+
+### Auth
+### Client
+### Connection
+### Endpoint
+### Errors
+### EventEmitter
+### HttpServerConnection
+### Server
+### SocketConnection
+### WebsocketConnection
+
 ## Debugging
 
 This module uses the [debug](http://github.com/visionmedia/debug) package, to debug it, you need to set the Node
 environment variable to jsonrpc, by setting it in command line as `set DEBUG=jsonrpc` or `export DEBUG=jsonrpc`
 
-## Support
+# Development
 
-`BTC: 1EAfhxEUu1VsEEAAXk3MtTXK3LCrWDhejj`
+* BTC: `16QDbqa6UMFtMCdDcJJ5N2bqryH4Q56BVU`
+* BCH: `1E6gKfkyxsjr2rSbcHbnfsQumKxkGKwRYc`
+* ETH: `0xfF9087E7112d3b7D7B5bDD6C9ffb0970ACC162E7`
+* MIOTA: `NNIH9VGEQFZAJIITBO9FEDSYUDYXHMAINGSKWIU9ADUHYYNTIYGJADZITOCVMWEFTKJGCNCJN9ZRFUZKCPSUOMDAKD`
+* NXT: `NXT-7TJT-8NS2-8QBS-5Y89X`
+* BTG: `GY2RWXUKYDmYDaroMmucgUdF7dLqaHDKWu`
+* XEM: `NBC772-Q3SL4X-AGVNMP-JAWGJE-U6BCSB-Q7WNAX-YU5V`
+* DASH: `XaqxcT3BDmSLGB4M6ozrET1qJPBA4RJpng`
+* XRB: `xrb_3fi16pk4gyz331r4531m7jywrfsgp3h31yoyfusac77esuamh65r5kwjz7dm`

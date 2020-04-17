@@ -1,3 +1,4 @@
+import { expect } from 'chai'
 import * as RPC from '../lib'
 import { ServerResponse } from 'http'
 
@@ -48,7 +49,7 @@ class MockResponse extends RPC.EventEmitter {
   }
 }
 
-describe('jsonrpc2', () => {
+suite('jsonrpc2', () => {
   beforeEach(function() {
     server = new RPC.Server()
 
@@ -109,13 +110,13 @@ describe('jsonrpc2', () => {
     TestModule = null
   })
 
-  it('Server expose', function() {
+  test('Server expose', function() {
     expect(server.functions.echo).to.eql(echo)
     server.exposeModule('test', TestModule)
     expect(server.functions['test.foo']).to.eql(TestModule.foo)
   })
 
-  it('GET Server handle NonPOST', function() {
+  test('GET Server handle NonPOST', function() {
     var req = new MockRequest('GET')
     var res = new MockResponse()
     server.handleHttp(req, res)
@@ -125,7 +126,7 @@ describe('jsonrpc2', () => {
     expect(decoded.error.code).to.equal(-32600)
   })
 
-  it('Method throw an error', function() {
+  test('Method throw an error', function() {
     var req = new MockRequest('POST')
     var res = new MockResponse()
 
@@ -140,7 +141,7 @@ describe('jsonrpc2', () => {
     expect(decoded.error.code).to.equal(-32603)
   })
 
-  it('Method return an rpc error', function() {
+  test('Method return an rpc error', function() {
     var req = new MockRequest('POST')
     var res = new MockResponse()
 
@@ -156,17 +157,17 @@ describe('jsonrpc2', () => {
   })
   //      text_error javascript_error
 
-  it('Missing object attribute (method)', function(done) {
+  test('Missing object attribute (method)', function(done) {
     var testJSON = '{ "params": ["Hello, World!"], "id": 1 }'
     testBadRequest(testJSON, done)
   })
 
-  it('Missing object attribute (params)', function(done) {
+  test('Missing object attribute (params)', function(done) {
     var testJSON = '{ "method": "echo", "id": 1 }'
     testBadRequest(testJSON, done)
   })
 
-  it('Unregistered method', function() {
+  test('Unregistered method', function() {
     var testJSON = '{ "method": "notRegistered", "params": ["Hello, World!"], "id": 1 }'
     var req = new MockRequest('POST')
     var res = new MockResponse()
@@ -188,7 +189,7 @@ describe('jsonrpc2', () => {
 
   // VALID REQUEST
 
-  it('Simple synchronous echo', function() {
+  test('Simple synchronous echo', function() {
     var testJSON = '{ "method": "echo", "params": ["Hello, World!"], "id": 1 }'
     var req = new MockRequest('POST')
     var res = new MockResponse()
@@ -207,7 +208,7 @@ describe('jsonrpc2', () => {
     expect(decoded.result).to.equal('Hello, World!')
   })
 
-  it('Simple synchronous echo with id as null', function() {
+  test('Simple synchronous echo with id as null', function() {
     var testJSON = '{ "method": "echo", "params": ["Hello, World!"], "id": null }'
     var req = new MockRequest('POST')
     var res = new MockResponse()
@@ -226,7 +227,7 @@ describe('jsonrpc2', () => {
     expect(decoded.result).to.equal('Hello, World!')
   })
 
-  it('Simple synchronous echo with string as id', function() {
+  test('Simple synchronous echo with string as id', function() {
     var testJSON = '{ "method": "echo", "params": ["Hello, World!"], "id": "test" }'
     var req = new MockRequest('POST')
     var res = new MockResponse()
@@ -245,7 +246,7 @@ describe('jsonrpc2', () => {
     expect(decoded.result).to.equal('Hello, World!')
   })
 
-  it('Using promise', function() {
+  test('Using promise', function() {
     // Expose a function that just returns a promise that we can control.
     var callbackRef = null
 
@@ -283,7 +284,7 @@ describe('jsonrpc2', () => {
     expect(decoded.result).to.equal('Hello, World!')
   })
 
-  it('Triggering an errback', function() {
+  test('Triggering an errback', function() {
     var callbackRef = null
 
     server.expose('errbackEcho', function(args, opts, callback) {
@@ -313,7 +314,7 @@ describe('jsonrpc2', () => {
     expect(decoded.result).to.equal(undefined)
   })
 
-  it('Notification request', function() {
+  test('Notification request', function() {
     var testJSON = '{ "method": "notify_test", "params": ["Hello, World!"] }'
 
     var req = new MockRequest('POST')

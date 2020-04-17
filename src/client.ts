@@ -3,36 +3,44 @@ import * as http from 'http'
 import * as https from 'https'
 import * as WebSocket from 'faye-websocket'
 import * as JsonParser from 'jsonparse'
-import EventEmitter, { RPCCallback } from './event-emitter'
-import Endpoint from './endpoint'
+import { EventEmitter, RpcCallback, RpcConnectResult, RpcParams, RpcResponse } from './event-emitter'
+import { Endpoint } from './endpoint'
 import * as _ from 'lodash'
-import SocketConnection from './socket-connection'
-import WebSocketConnection from './websocket-connection'
+import * as Bluebird from 'bluebird'
+import { SocketConnection } from './socket-connection'
+import { WebsocketConnection } from './websocket-connection'
 import * as Auth from './auth'
+import * as Errors from './errors'
 
-export interface ConnectHTTPOptions extends http.RequestOptions {
-  type: 'http' | 'websocket' | 'socket'
+export interface ConnectHttpOptions extends http.RequestOptions {
+  type?: 'http' | 'websocket' | 'socket'
+  secure?: boolean
   rejectUnauthorized?: boolean
 }
 
 /**
  * JSON-RPC Client.
  */
-export default class Client extends Endpoint {
+export class Client extends Endpoint {
   protected auth: Auth.Auth | null = null
+  protected id: number = 1
 
   constructor(public port: number, public host: string, auth?: Auth.Auth) {
     super()
 
     if (auth) {
-      this.addAuth(auth)
+      this.setAuth(auth)
     }
   }
 
-  addAuth(auth: Auth.Auth) {
+  setAuth(auth: Auth.Auth) {
     this.auth = auth
 
     return this
+  }
+
+  incrementId() {
+    return this.id++
   }
 
   /**
@@ -41,106 +49,118 @@ export default class Client extends Endpoint {
    * In HTTP mode, we get to submit exactly one message and receive up to n
    * messages.
    */
-  async connectHttp<T>(
+  async connectHttp(
     method: string,
-    params: any[],
-    callback: RPCCallback<T>,
-    opts: ConnectHTTPOptions = {}
+    params: RpcParams,
+    opts: ConnectHttpOptions = {},
+    callback?: RpcCallback<RpcConnectResult>,
   ) {
-    let id = 1
-
-    // First we encode the request into JSON
-    let requestJSON = JSON.stringify({
-      id: id,
-      method: method,
-      params: params,
-      jsonrpc: '2.0'
-    })
-
     let headers: any = {}
 
-    if (this.auth) {
-      await this.auth.set('http')
+    if (this.auth instanceof Auth.Auth) {
+      const authHeaders = await this.auth.client({ method, params, options: opts })
+
+      if (authHeaders && authHeaders.headers) {
+        headers = {
+          ...authHeaders.headers
+        }
+      }
     }
 
-    // Then we build some basic headers.
-    headers['Host'] = this.host
-    headers['Content-Length'] = Buffer.byteLength(requestJSON, 'utf8')
+    return new Bluebird<RpcConnectResult>((resolve, reject) => {
+      let id = this.incrementId()
 
-    // Now we'll make a request to the server
-    let options: http.RequestOptions & https.RequestOptions = {
-      hostname: this.host,
-      port: this.port,
-      path: opts.path || '/',
-      method: 'POST',
-      headers: headers
-    }
+      // First we encode the request into JSON
+      let requestJSON = JSON.stringify({
+        id: id,
+        method: method,
+        params: params,
+        jsonrpc: '2.0'
+      })
 
-    let request: http.ClientRequest
+      headers['Host'] = this.host
+      headers['Content-Length'] = Buffer.byteLength(requestJSON, 'utf8')
 
-    if (opts.https === true) {
-      if (opts.rejectUnauthorized !== undefined) {
-        options.rejectUnauthorized = opts.rejectUnauthorized
+      let options: http.RequestOptions & https.RequestOptions = {
+        hostname: this.host,
+        port: this.port,
+        path: opts.path || '/',
+        method: 'POST',
+        headers: headers
       }
 
-      request = https.request(options)
-    } else {
-      request = http.request(options)
-    }
+      let request: http.ClientRequest
 
-    // Report errors from the http client. This also prevents crashes since
-    // an exception is thrown if we don't handle this event.
-    request.on('error', err => {
-      callback(err instanceof Error ? err : new Error(err))
-    })
+      if (opts.secure === true) {
+        if (typeof opts.rejectUnauthorized !== 'undefined') {
+          options.rejectUnauthorized = opts.rejectUnauthorized
+        }
 
-    request.write(requestJSON)
+        request = https.request(options)
+      } else {
+        request = http.request(options)
+      }
 
-    request.on('response', response => {
-      callback(id, request, response)
-    })
+      request.on('error', (err) => {
+        reject(Errors.wrapError(err, Errors.InternalError).setCode((err as any).errno))
+      })
+
+      request.on('response', (response) => {
+        if (response.statusCode !== 200) {
+          return reject((new Errors.InvalidRequest(response.statusMessage)).setCode(response.statusCode))
+        }
+
+        resolve({ id, request, response })
+      })
+
+      request.write(requestJSON)
+    }).asCallback(callback)
   }
 
-  async connectWebsocket<T>(callback: RPCCallback<T>) {
-    let headers: any = {}
+  async connectWebsocket(
+    callback?: RpcCallback<RpcConnectResult>
+  ) {
+    return new Bluebird((resolve, reject) => {
+      let headers: any = {}
 
-    if (!/^wss?:\/\//i.test(this.host)) {
-      this.host = 'ws://' + this.host + ':' + this.port + '/'
-    }
-
-    this._authHeader(headers)
-
-    const socket = new WebSocket.Client(this.host, null, { headers: headers })
-
-    const conn = new WebSocketConnection(this, socket)
-
-    const parser = new JsonParser()
-
-    parser.onValue = function parseOnValue(decoded: any) {
-      if (this.stack.length) {
-        return
+      if (!/^wss?:\/\//i.test(this.host)) {
+        this.host = 'ws://' + this.host + ':' + this.port + '/'
       }
 
-      conn.handleMessage(decoded)
-    }
+      this._authHeader(headers)
 
-    socket.on('error', event => {
-      callback(event.reason)
-    })
+      const socket = new WebSocket.Client(this.host, null, { headers: headers })
 
-    socket.on('open', () => {
-      callback(null, conn)
-    })
+      const conn = new WebSocketConnection(this, socket)
 
-    socket.on('message', event => {
-      try {
-        parser.write(event.data)
-      } catch (err) {
-        EventEmitter.trace('<--', err.toString())
+      const parser = new JsonParser()
+
+      parser.onValue = function parseOnValue(decoded: any) {
+        if (this.stack.length) {
+          return
+        }
+
+        conn.handleMessage(decoded)
       }
-    })
 
-    return conn
+      socket.on('error', event => {
+        callback(event.reason)
+      })
+
+      socket.on('open', () => {
+        callback(null, conn)
+      })
+
+      socket.on('message', event => {
+        try {
+          parser.write(event.data)
+        } catch (err) {
+          EventEmitter.trace('<--', err.toString())
+        }
+      })
+
+      return conn
+    })
   }
 
   /**
@@ -211,7 +231,7 @@ export default class Client extends Endpoint {
 
         // We need to buffer the response chunks in a nonblocking way.
         var parser = new JsonParser()
-        parser.onValue = function(decoded) {
+        parser.onValue = function (decoded) {
           if (this.stack.length) {
             return
           }
@@ -255,50 +275,42 @@ export default class Client extends Endpoint {
 
   async call<T>(
     method: string,
-    params: any[],
-    callback?: RPCCallback<T>,
-    opts: ConnectHTTPOptions = {}
+    params: RpcParams,
+    opts: ConnectHttpOptions = {},
+    callback?: RpcCallback<RpcResponse<T>>,
   ) {
     EventEmitter.trace('-->', 'Http call (method ' + method + '): ' + JSON.stringify(params))
 
-    this.connectHttp(
+    const conn = await this.connectHttp(
       method,
       params,
-      (request, response) => {
-        // Check if response object exists.
-        if (!response) {
-          callback(new Error('Have no response object'))
-          return
-        }
-
-        var data = ''
-
-        response.on('data', function responseData(chunk) {
-          data += chunk
-        })
-
-        response.on('end', function responseEnd() {
-          if (response.statusCode !== 200) {
-            return callback(new Error('"' + response.statusCode + '"' + data))
-          }
-
-          if (_.isFunction(callback)) {
-            let decoded: any
-
-            try {
-              decoded = JSON.parse(data)
-            } catch (e) {
-              return callback(e)
-            }
-
-            if (!decoded.error) {
-              decoded.error = null
-            }
-            callback(decoded.error, decoded.result)
-          }
-        })
-      },
       opts
     )
+
+    if (!conn.response) {
+      throw new Errors.RpcError('Have no response object')
+    }
+
+    return new Bluebird<RpcResponse<T>>((resolve, reject) => {
+      const parser = new JsonParser()
+
+      parser.onValue = function(value: any) {
+        if (this.stack.length === 0 && value) {
+          resolve(value)
+        }
+      }
+
+      parser.onError = function(err: Error) {
+        reject(new Errors.ParseError(err.message))
+      }
+
+      conn.response.on('data', function responseData(chunk) {
+        parser.write(chunk)
+      })
+
+      conn.response.on('end', function responseEnd() {
+        parser.onValue = parser.onError = function() { }
+      })
+    }).asCallback(callback)
   }
 }

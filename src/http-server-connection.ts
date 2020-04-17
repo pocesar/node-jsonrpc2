@@ -1,6 +1,6 @@
-import Connection from "./connection";
+import { Connection } from "./connection";
 
-export default class HttpServerConnection extends Connection {
+export class HttpServerConnection extends Connection {
   constructor(server, req, res) {
     var self = this;
 

@@ -6,6 +6,8 @@
     "module": "commonjs",
     "rootDir": "src",
     "declaration": true,
+    "strict": true,
+    "strictFunctionTypes": false,
     "noImplicitAny": true,
     "noImplicitThis": true,
     "noEmitOnError": true,

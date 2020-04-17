@@ -1,34 +1,39 @@
-import Connection from "./connection";
-import Endpoint from "./endpoint";
-import { Socket } from "net";
+import { Connection } from "./connection"
+import { Endpoint } from "./endpoint"
+import { Socket } from "net"
+
 /**
  * Websocket connection.
  *
  * Socket connections are mostly symmetric, so we are using a single class for
  * representing both the server and client perspective.
  */
-export default class WebSocketConnection extends Connection {
-  ended: boolean = false;
+export class WebsocketConnection extends Connection {
+  ended: boolean = false
 
-  constructor(endpoint: Endpoint, protected conn: Socket) {
-    super(endpoint);
+  constructor(endpoint: Endpoint, protected socket: Socket) {
+    super(endpoint)
 
-    this.conn.on("close", (hadError) => {
-      this.emit("close", hadError);
-    });
+    this.socket.on("close", (hadError) => {
+      this.emit("close", hadError)
+    })
   }
 
   write(data: any) {
-    if (!this.conn.writable) {
+    if (!this.socket.writable) {
       // Other side disconnected, we'll quietly fail
-      return;
+      return
     }
 
-    this.conn.write(data);
+    this.socket.write(data)
+
+    return this
   }
 
   end() {
-    this.conn.end();
-    this.ended = true;
+    this.socket.end()
+    this.ended = true
+
+    return this
   }
 }

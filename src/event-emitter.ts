@@ -1,52 +1,56 @@
 import * as Debug from 'debug'
 import { EventEmitter as EE3 } from 'eventemitter3'
 import { JsonError, RpcError } from './errors'
+import { ClientRequest, IncomingMessage } from 'http'
 
 const debug = Debug('jsonrpc')
 
 export type RpcId = number | string | null
-export type RpcCallback<T> = (err: JSONError, result?: T) => void
+export type RpcConnectResult = { id: string, request: ClientRequest, response: IncomingMessage }
+export type RpcCallback<T> = (err: JsonError, result?: T) => void
 
-export type RpcParams = any[] | { [index: string ]: any }
+export type RpcParams = any[] | { [index: string]: any }
 
-export interface RPCNotification {
+export interface RpcNotification {
   jsonrpc: '2.0'
   method: string
-  params?: RPCParams
-  id?: RPCId
+  params?: RpcParams
+  id?: RpcId
 }
 
-export interface RPCRequest extends RPCNotification {
-  id: RPCId
+export interface RpcRequest extends RpcNotification {
+  id: RpcId
 }
 
-export interface RPCResponse<T> {
+export interface RpcResponse<T> {
   jsonrpc: '2.0'
   result: T
-  error?: JSONError | RPCError
-  id: RPCId
+  error?: JsonError | RpcError
+  id: RpcId
 }
 
-export default class EventEmitter extends EE3 {
-  /**
-   * Output a piece of debug information.
-   */
-  static trace(direction: string, message: string) {
-    var msg = `   ${direction}    ${message}`
-    debug(msg)
-    return msg
-  }
+const numberRegex = /^\-?\d+$/
 
-  /**
-   * Check if current request has an id adn it is of type integer (non fractional) or string.
-   */
-  static hasId(request: RPCRequest) {
-    return (
-      request &&
-      typeof request['id'] !== 'undefined' &&
-      ((typeof request['id'] === 'number' && /^\-?\d+$/.test(`${request['id']}`)) ||
-        typeof request['id'] === 'string' ||
-        request['id'] === null)
-    )
-  }
+/**
+* Output a piece of debug information.
+*/
+export const trace = (direction: string, message: string)  => {
+ var msg = `   ${direction}    ${message}`
+ debug(msg)
+ return msg
 }
+
+/**
+ * Check if current request has an id and it is of type integer (non fractional) or string.
+ */
+export const hasId = (request: RpcRequest) => {
+  return (
+    request &&
+    typeof request['id'] !== 'undefined' &&
+    ((typeof request['id'] === 'number' && numberRegex.test(`${request['id']}`)) ||
+      typeof request['id'] === 'string' ||
+      request['id'] === null)
+  )
+}
+
+export class EventEmitter extends EE3 { }

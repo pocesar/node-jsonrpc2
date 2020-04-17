@@ -6,6 +6,6 @@
     "listEmittedFiles": false
   },
   "files": [
-    "test/jsonrpc-test.ts"
+    "test/tests.ts"
   ]
 }

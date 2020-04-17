@@ -1,5 +1,6 @@
 --reporter list
---ui bdd
+--ui tdd
 --check-leaks
 --exit
-test/jsonrpc-test.js
+--timeout 5000
+test/tests.js
