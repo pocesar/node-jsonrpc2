@@ -18,6 +18,7 @@ module.exports = function (classes){
         this.scopes = {};
         this.defaultScope = this;
         this.exposeModule = this.expose;
+        this.on('error', () => { });
       },
       /**
        * Define a callable method on this RPC endpoint

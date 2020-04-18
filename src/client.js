@@ -23,10 +23,11 @@ module.exports = function (classes){
         this.host = host;
         this.user = user;
         this.password = password;
+        this.on('error', () => {});
       },
       _authHeader: function(headers){
         if (this.user && this.password) {
-          var buff = new Buffer(this.user + ':' + this.password).toString('base64');
+          var buff = Buffer.from(this.user + ':' + this.password).toString('base64');
           headers['Authorization'] = 'Basic ' + buff;
         }
       },

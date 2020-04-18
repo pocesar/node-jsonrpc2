@@ -13,7 +13,7 @@ module.exports = function (classes){
         this.latestId = 0;
 
         // Default error handler (prevents ''uncaught error event'')
-        this.on('error', function (){ });
+        this.on('error', () => { });
       },
       /**
        * Make a standard RPC call to the other endpoint.

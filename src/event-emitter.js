@@ -25,7 +25,7 @@ module.exports = function (classes){
         (typeof(request['id']) === 'string') || (request['id'] === null)
       );
     }
-  }).$inherit(require('eventemitter3'), []);
+  }).$inherit(require('events').EventEmitter, []);
 
   return EventEmitter;
 };

@@ -76,9 +76,9 @@ module.exports = {
       req.emit('data', testJSON);
       req.emit('end');
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(null);
-      expect(decoded.error.message).to.equal('Invalid Request');
-      expect(decoded.error.code).to.equal(-32600);
+      expect(decoded.id).equal(null);
+      expect(decoded.error.message).equal('Invalid Request');
+      expect(decoded.error.code).equal(-32600);
       done();
     };
   },
@@ -91,12 +91,12 @@ module.exports = {
   },
   'json-rpc2': {
     'Server expose': function (){
-      expect(server.functions.echo).to.eql(echo);
+      expect(server.functions.echo).eql(echo);
     },
 
     'Server exposeModule': function (){
       server.exposeModule('test', TestModule);
-      expect(server.functions['test.foo']).to.eql(TestModule.foo);
+      expect(server.functions['test.foo']).eql(TestModule.foo);
     },
 
     'GET Server handle NonPOST': function (){
@@ -104,9 +104,9 @@ module.exports = {
       var res = new MockResponse();
       server.handleHttp(req, res);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(null);
-      expect(decoded.error.message).to.equal('Invalid Request');
-      expect(decoded.error.code).to.equal(-32600);
+      expect(decoded.id).equal(null);
+      expect(decoded.error.message).equal('Invalid Request');
+      expect(decoded.error.code).equal(-32600);
     },
     'Method throw an error' : function() {
       var req = new MockRequest('POST');
@@ -115,9 +115,9 @@ module.exports = {
       req.emit('data', '{ "method": "throw_error", "params": [], "id": 1 }');
       req.emit('end');
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(1);
-      expect(decoded.error.message).to.equal('InternalError');
-      expect(decoded.error.code).to.equal(-32603);
+      expect(decoded.id).equal(1);
+      expect(decoded.error.message).equal('InternalError');
+      expect(decoded.error.code).equal(-32603);
     },
     'Method return an rpc error' : function() {
       var req = new MockRequest('POST');
@@ -126,9 +126,9 @@ module.exports = {
       req.emit('data', '{ "method": "json_rpc_error", "params": [], "id": 1 }');
       req.emit('end');
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(1);
-      expect(decoded.error.message).to.equal('InternalError');
-      expect(decoded.error.code).to.equal(-32603);
+      expect(decoded.id).equal(1);
+      expect(decoded.error.message).equal('InternalError');
+      expect(decoded.error.code).equal(-32603);
     },
 //      text_error javascript_error
 
@@ -151,11 +151,11 @@ module.exports = {
       } catch (e) {}
       req.emit('data', testJSON);
       req.emit('end');
-      expect(res.httpCode).to.equal(200);
+      expect(res.httpCode).equal(200);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(1);
-      expect(decoded.error.message).to.equal('Unknown RPC call "notRegistered"');
-      expect(decoded.error.code).to.equal(-32601);
+      expect(decoded.id).equal(1);
+      expect(decoded.error.message).equal('Unknown RPC call "notRegistered"');
+      expect(decoded.error.code).equal(-32601);
     },
 
     // VALID REQUEST
@@ -167,11 +167,11 @@ module.exports = {
       server.handleHttp(req, res);
       req.emit('data', testJSON);
       req.emit('end');
-      expect(res.httpCode).to.equal(200);
+      expect(res.httpCode).equal(200);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(1);
-      expect(decoded.error).to.equal(undefined);
-      expect(decoded.result).to.equal('Hello, World!');
+      expect(decoded.id).equal(1);
+      expect(decoded.error).equal(undefined);
+      expect(decoded.result).equal('Hello, World!');
     },
 
     'Simple synchronous echo with id as null': function (){
@@ -181,11 +181,11 @@ module.exports = {
       server.handleHttp(req, res);
       req.emit('data', testJSON);
       req.emit('end');
-      expect(res.httpCode).to.equal(200);
+      expect(res.httpCode).equal(200);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(null);
-      expect(decoded.error).to.equal(undefined);
-      expect(decoded.result).to.equal('Hello, World!');
+      expect(decoded.id).equal(null);
+      expect(decoded.error).equal(undefined);
+      expect(decoded.result).equal('Hello, World!');
     },
 
     'Simple synchronous echo with string as id': function (){
@@ -195,11 +195,11 @@ module.exports = {
       server.handleHttp(req, res);
       req.emit('data', testJSON);
       req.emit('end');
-      expect(res.httpCode).to.equal(200);
+      expect(res.httpCode).equal(200);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal('test');
-      expect(decoded.error).to.equal(undefined);
-      expect(decoded.result).to.equal('Hello, World!');
+      expect(decoded.id).equal('test');
+      expect(decoded.error).equal(undefined);
+      expect(decoded.result).equal('Hello, World!');
     },
 
     'Using promise': function (){
@@ -220,15 +220,15 @@ module.exports = {
       // would be finished. However, this function is smarter and only completes
       // when the promise completes.  Therefore, we should not have a response
       // yet.
-      expect(res.httpCode).to.not.be.ok();
+      expect(res.httpCode).be(undefined);
       // We can force the promise to emit a success code, with a message.
       callbackRef(null, 'Hello, World!');
       // Aha, now that the promise has finished, our request has finished as well.
-      expect(res.httpCode).to.equal(200);
+      expect(res.httpCode).equal(200);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(1);
-      expect(decoded.error).to.equal(undefined);
-      expect(decoded.result).to.equal('Hello, World!');
+      expect(decoded.id).equal(1);
+      expect(decoded.error).equal(undefined);
+      expect(decoded.result).equal('Hello, World!');
     },
 
     'Triggering an errback': function (){
@@ -242,16 +242,16 @@ module.exports = {
       server.handleHttp(req, res);
       req.emit('data', testJSON);
       req.emit('end');
-      expect(res.httpCode).to.not.be.ok();
+      expect(res.httpCode).be(undefined);
       // This time, unlike the above test, we trigger an error and expect to see
       // it in the error attribute of the object returned.
       callbackRef('This is an error');
-      expect(res.httpCode).to.equal(200);
+      expect(res.httpCode).equal(200);
       var decoded = JSON.parse(res.httpBody);
-      expect(decoded.id).to.equal(1);
-      expect(decoded.error.message).to.equal('This is an error');
-      expect(decoded.error.code).to.equal(-32603);
-      expect(decoded.result).to.equal(undefined);
+      expect(decoded.id).equal(1);
+      expect(decoded.error.message).equal('This is an error');
+      expect(decoded.error.code).equal(-32603);
+      expect(decoded.result).equal(undefined);
     },
     'Notification request': function () {
       var testJSON = '{ "method": "notify_test", "params": ["Hello, World!"] }';
@@ -262,8 +262,8 @@ module.exports = {
       req.emit('end');
       // although it shouldn't return a response, we are dealing with HTTP, that MUST
       // return something, in most cases, 0 length body
-      expect(res.httpCode).to.equal(200);
-      expect(res.httpBody).to.equal('');
+      expect(res.httpCode).equal(200);
+      expect(res.httpBody).equal('');
     }
   }
 };

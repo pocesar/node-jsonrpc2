@@ -26,6 +26,7 @@ module.exports = function (classes) {
         this.opts.type = typeof this.opts.type !== 'undefined' ? this.opts.type : 'http';
         this.opts.headers = this.opts.headers || {};
         this.opts.websocket = typeof this.opts.websocket !== 'undefined' ? this.opts.websocket : true;
+        this.on('error', () => {});
       },
       _checkAuth: function (req, res) {
         var self = this;
@@ -34,7 +35,7 @@ module.exports = function (classes) {
           var
             authHeader = req.headers['authorization'] || '', // get the header
             authToken = authHeader.split(/\s+/).pop() || '', // get the token
-            auth = new Buffer(authToken, 'base64').toString(), // base64 -> string
+            auth = Buffer.from(authToken, 'base64').toString(), // base64 -> string
             parts = auth.split(/:/), // split on colon
             username = parts[0],
             password = parts[1];
