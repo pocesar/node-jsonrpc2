@@ -40,7 +40,7 @@ module.exports = function (classes){
           params : params,
           id     : id
         });
-        this.write(data);
+        this.write(data + '\n');
       },
 
       /**
@@ -101,7 +101,9 @@ module.exports = function (classes){
               }
 
               if (err) {
-                err = err.toString();
+                //err = err.toString();
+                //by specification need object with fields 'message' and code
+                err = err.getObject();
                 result = null;
               } else {
                 EventEmitter.trace('-->', 'Response (id ' + msg.id + '): ' +
@@ -115,15 +117,16 @@ module.exports = function (classes){
         }
       },
 
-      sendReply: function (err, result, id){
-        var data = JSON.stringify({
-          jsonrpc: '2.0',
-          result : result,
-          error  : err,
-          id     : id
-        });
-
-        this.write(data);
+      sendReply: function (error, result, id){
+        const jsonrpc = '2.0'
+        let data = { result, error, id, jsonrpc };
+        for (let key of Object.keys(data)){
+          if (_.isNull(data[key])){
+            delete data[key];
+          }
+        }
+        let send = JSON.stringify(data);
+        this.write(send);
       }
     });
 

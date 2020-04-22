@@ -16,6 +16,10 @@ module.exports = function (classes){
     },
     toString: function(){
       return this.message;
+    },
+    getObject: function(){
+      let {code = 0, message = ''} = this;
+      return {code, message};
     }
   }).$inherit(Error, []);
 
